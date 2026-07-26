@@ -116,56 +116,49 @@ export default async function Home() {
   const products = await getProducts();
 
   return (
-    <html>
-      <head>
-        <title>🛍️ My Store</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <script src="https://cdn.tailwindcss.com"></script>
-      </head>
-      <body className="bg-gray-50">
-        <div className="container mx-auto px-4 py-8">
-          <h1 className="text-4xl font-bold text-center mb-8">🛍️ Our Store</h1>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {products.map((product) => (
-              <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition">
-                <div className="h-48 bg-gradient-to-r from-blue-100 to-purple-100 flex items-center justify-center">
-                  {product.image_url ? (
-                    <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <span className="text-gray-400 text-lg">📦 No Image</span>
-                  )}
-                </div>
-                <div className="p-6">
-                  <h2 className="text-xl font-semibold mb-2">{product.name}</h2>
-                  <p className="text-2xl font-bold text-green-600 mb-2">${product.price}</p>
-                  <p className="text-gray-600 mb-2">{product.description}</p>
-                  <p className="text-sm text-gray-500 mb-4">📋 {product.instructions}</p>
-                  
-                  <a
-                    href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
-                      product.whatsapp_text || `I want to buy ${product.name} for $${product.price}`
-                    )}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="block w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg text-center transition"
-                  >
-                    💬 Buy on WhatsApp
-                  </a>
-                </div>
+    <div className="min-h-screen bg-gray-50">
+      <div className="container mx-auto px-4 py-8">
+        <h1 className="text-4xl font-bold text-center mb-8">🛍️ Our Store</h1>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {products.map((product) => (
+            <div key={product.id} className="bg-white rounded-xl shadow-lg overflow-hidden hover:shadow-xl transition">
+              <div className="h-48 bg-gradient-to-r from-blue-100 to-purple-100 flex items-center justify-center">
+                {product.image_url ? (
+                  <img src={product.image_url} alt={product.name} className="w-full h-full object-cover" />
+                ) : (
+                  <span className="text-gray-400 text-lg">📦 No Image</span>
+                )}
               </div>
-            ))}
-          </div>
-
-          {products.length === 0 && (
-            <div className="text-center text-gray-500 py-12">
-              <p className="text-xl">No products yet.</p>
-              <p className="mt-2">Add products via Telegram bot.</p>
+              <div className="p-6">
+                <h2 className="text-xl font-semibold mb-2">{product.name}</h2>
+                <p className="text-2xl font-bold text-green-600 mb-2">${product.price}</p>
+                <p className="text-gray-600 mb-2">{product.description}</p>
+                <p className="text-sm text-gray-500 mb-4">📋 {product.instructions}</p>
+                
+                <a
+                  href={`https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(
+                    product.whatsapp_text || `I want to buy ${product.name} for $${product.price}`
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="block w-full bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg text-center transition"
+                >
+                  💬 Buy on WhatsApp
+                </a>
+              </div>
             </div>
-          )}
+          ))}
         </div>
-      </body>
-    </html>
+
+        {products.length === 0 && (
+          <div className="text-center text-gray-500 py-12">
+            <p className="text-xl">No products yet.</p>
+            <p className="mt-2">Add products via Telegram bot.</p>
+          </div>
+        )}
+      </div>
+    </div>
   );
 }
 
