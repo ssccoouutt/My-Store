@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - RENDER FREE TIER FIXED
+# COMPLETE STORE SCRIPT - FIXED GLOBAL SCOPE
 # ============================================
 
 import threading
@@ -50,26 +50,43 @@ logger.info(f"📁 Products file: {PRODUCTS_FILE}")
 logger.info(f"📁 Images folder: {IMAGES_FOLDER}")
 
 # ============================================
-# INITIALIZE PRODUCTS
+# GLOBAL PRODUCTS VARIABLE
 # ============================================
+
+# This is the CRITICAL fix - products must be global
+products = []
+next_product_id = 1
 
 def load_products():
     """Load products from JSON file with detailed logging"""
+    global products, next_product_id
+    
     try:
         if os.path.exists(PRODUCTS_FILE):
             with open(PRODUCTS_FILE, 'r') as f:
                 products = json.load(f)
+                if products:
+                    next_product_id = max([p["id"] for p in products]) + 1
+                else:
+                    next_product_id = 1
                 logger.info(f"✅ Loaded {len(products)} products from {PRODUCTS_FILE}")
+                logger.info(f"🆔 Next product ID: {next_product_id}")
                 return products
         else:
             logger.info(f"📭 No products file found at {PRODUCTS_FILE}, starting empty")
+            products = []
+            next_product_id = 1
             return []
     except Exception as e:
         logger.error(f"❌ Error loading products: {e}")
+        products = []
+        next_product_id = 1
         return []
 
-def save_products(products):
+def save_products():
     """Save products to JSON file with detailed logging"""
+    global products
+    
     try:
         # Ensure directory exists
         os.makedirs(os.path.dirname(PRODUCTS_FILE), exist_ok=True)
@@ -83,20 +100,21 @@ def save_products(products):
         if os.path.exists(PRODUCTS_FILE):
             file_size = os.path.getsize(PRODUCTS_FILE)
             logger.info(f"📄 File size: {file_size} bytes")
+            
+            # Log first product for debugging
+            if products:
+                logger.info(f"📦 First product: {products[0].get('name', 'Unknown')}")
+            
+            return True
         else:
             logger.error("❌ File not found after save!")
-            
-        return True
+            return False
     except Exception as e:
         logger.error(f"❌ Error saving products: {e}")
         return False
 
-# Load products
-products = load_products()
-next_product_id = max([p["id"] for p in products]) + 1 if products else 1
-
-logger.info(f"📦 Current product count: {len(products)}")
-logger.info(f"🆔 Next product ID: {next_product_id}")
+# Load products on startup
+load_products()
 
 # ============================================
 # FLASK WEB APP
@@ -104,7 +122,7 @@ logger.info(f"🆔 Next product ID: {next_product_id}")
 
 app = Flask(__name__)
 
-# HTML Template with 2 columns mobile, 3 columns desktop
+# HTML Template
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -277,6 +295,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
+    global products
     logger.info(f"🏠 Home page requested - {len(products)} products available")
     return render_template_string(
         HTML_TEMPLATE,
@@ -286,6 +305,7 @@ def home():
 
 @app.route('/api/products')
 def api_products():
+    global products
     logger.info(f"📡 API products requested - {len(products)} products")
     return jsonify(products)
 
@@ -299,6 +319,7 @@ def get_image(filename):
 @app.route('/debug')
 def debug():
     """Debug endpoint to check storage"""
+    global products
     info = {
         "base_dir": BASE_DIR,
         "products_file": PRODUCTS_FILE,
@@ -399,7 +420,7 @@ def process_telegram_command(update):
             send_telegram_message(chat_id, "⛔ Access denied. You are not authorized to use this bot.")
             return
         
-        # Handle commands
+        # Parse command
         if text.startswith('/start'):
             send_telegram_message(chat_id, 
                 "👋 Welcome Admin!\n\n"
@@ -526,11 +547,12 @@ def save_product_image(image_file_id, product_id):
         return None, None
 
 def process_add_product(chat_id, text, image_file_id, has_image):
-    """Process add product command"""
-    global next_product_id, products
+    """Process add product command - FIXED with global"""
+    global products, next_product_id
     
     try:
         logger.info(f"➕ Adding product from: {text[:100]}")
+        logger.info(f"📊 Current products count before add: {len(products)}")
         
         command_parts = text.replace('/add', '').strip()
         parts = [p.strip() for p in command_parts.split('|')]
@@ -570,12 +592,16 @@ def process_add_product(chat_id, text, image_file_id, has_image):
                 new_product['has_image'] = True
                 logger.info(f"📸 Image attached to product {next_product_id}")
         
+        # Add to global products list
         products.append(new_product)
-        save_success = save_products(products)
+        next_product_id += 1
+        
+        # Save to file
+        save_success = save_products()
         
         if save_success:
-            next_product_id += 1
             logger.info(f"✅ Product added successfully: {name} (ID: {new_product['id']})")
+            logger.info(f"📊 Products count after add: {len(products)}")
             
             response = f"✅ *Product Added Successfully!*\n\n"
             response += f"📦 Name: {name}\n"
@@ -586,7 +612,11 @@ def process_add_product(chat_id, text, image_file_id, has_image):
             response += f"\n🔗 Website updated automatically!"
             
             send_telegram_message(chat_id, response)
+            
+            # Log the current products for debugging
+            logger.info(f"📋 Current products: {[p['name'] for p in products]}")
         else:
+            logger.error("❌ Failed to save product to file")
             send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
         
     except ValueError as e:
@@ -598,6 +628,8 @@ def process_add_product(chat_id, text, image_file_id, has_image):
 
 def process_edit_product(chat_id, text, image_file_id, has_image):
     """Process edit product command"""
+    global products
+    
     try:
         logger.info(f"✏️ Editing product from: {text[:100]}")
         
@@ -642,7 +674,7 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
                         p['has_image'] = True
                         logger.info(f"📸 Image updated for product {product_id}")
                 
-                save_success = save_products(products)
+                save_success = save_products()
                 
                 if save_success:
                     logger.info(f"✅ Product updated successfully: {name} (ID: {product_id})")
@@ -668,6 +700,8 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
 
 def process_delete_product(chat_id, text):
     """Process delete product command"""
+    global products
+    
     try:
         product_id = int(text.replace('/delete', '').strip())
         logger.info(f"🗑️ Deleting product ID: {product_id}")
@@ -683,7 +717,7 @@ def process_delete_product(chat_id, text):
                     except:
                         pass
                 
-                save_success = save_products(products)
+                save_success = save_products()
                 
                 if save_success:
                     logger.info(f"✅ Product deleted successfully: {removed_product['name']} (ID: {product_id})")
@@ -808,7 +842,7 @@ def add_test_products():
             }
         ]
         products = test_products
-        if save_products(products):
+        if save_products():
             next_product_id = max([p["id"] for p in products]) + 1
             logger.info(f"✅ Added {len(products)} test products")
         else:
