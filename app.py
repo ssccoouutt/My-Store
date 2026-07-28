@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - RENDER DEPLOYMENT
+# COMPLETE STORE SCRIPT - RENDER FREE TIER FIXED
 # ============================================
 
 import threading
@@ -23,32 +23,80 @@ TELEGRAM_BOT_TOKEN = "8898921110:AAFGHyoOkhpo8lC1UbbA7SyaMWSd1qmFNcE"
 WHATSAPP_NUMBER = "923400315734"  # Without + sign
 ADMIN_CHAT_ID = "990321391"
 
-# File to store products
-PRODUCTS_FILE = "products.json"
-IMAGES_FOLDER = "product_images"
+# ============================================
+# SETUP LOGGING
+# ============================================
 
-# Create images folder if it doesn't exist
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
+# ============================================
+# FILE STORAGE - USING /tmp (Works on Render Free)
+# ============================================
+
+# Use /tmp directory (works on Render free tier)
+BASE_DIR = "/tmp/premium_store"
+os.makedirs(BASE_DIR, exist_ok=True)
+
+PRODUCTS_FILE = os.path.join(BASE_DIR, "products.json")
+IMAGES_FOLDER = os.path.join(BASE_DIR, "product_images")
 os.makedirs(IMAGES_FOLDER, exist_ok=True)
+
+logger.info(f"📁 Storage directory: {BASE_DIR}")
+logger.info(f"📁 Products file: {PRODUCTS_FILE}")
+logger.info(f"📁 Images folder: {IMAGES_FOLDER}")
 
 # ============================================
 # INITIALIZE PRODUCTS
 # ============================================
 
 def load_products():
-    """Load products from JSON file"""
-    if os.path.exists(PRODUCTS_FILE):
-        with open(PRODUCTS_FILE, 'r') as f:
-            return json.load(f)
-    return []  # Start with empty products
+    """Load products from JSON file with detailed logging"""
+    try:
+        if os.path.exists(PRODUCTS_FILE):
+            with open(PRODUCTS_FILE, 'r') as f:
+                products = json.load(f)
+                logger.info(f"✅ Loaded {len(products)} products from {PRODUCTS_FILE}")
+                return products
+        else:
+            logger.info(f"📭 No products file found at {PRODUCTS_FILE}, starting empty")
+            return []
+    except Exception as e:
+        logger.error(f"❌ Error loading products: {e}")
+        return []
 
 def save_products(products):
-    """Save products to JSON file"""
-    with open(PRODUCTS_FILE, 'w') as f:
-        json.dump(products, f, indent=2)
+    """Save products to JSON file with detailed logging"""
+    try:
+        # Ensure directory exists
+        os.makedirs(os.path.dirname(PRODUCTS_FILE), exist_ok=True)
+        
+        with open(PRODUCTS_FILE, 'w') as f:
+            json.dump(products, f, indent=2)
+        
+        logger.info(f"✅ Saved {len(products)} products to {PRODUCTS_FILE}")
+        
+        # Verify save worked
+        if os.path.exists(PRODUCTS_FILE):
+            file_size = os.path.getsize(PRODUCTS_FILE)
+            logger.info(f"📄 File size: {file_size} bytes")
+        else:
+            logger.error("❌ File not found after save!")
+            
+        return True
+    except Exception as e:
+        logger.error(f"❌ Error saving products: {e}")
+        return False
 
 # Load products
 products = load_products()
 next_product_id = max([p["id"] for p in products]) + 1 if products else 1
+
+logger.info(f"📦 Current product count: {len(products)}")
+logger.info(f"🆔 Next product ID: {next_product_id}")
 
 # ============================================
 # FLASK WEB APP
@@ -65,550 +113,109 @@ HTML_TEMPLATE = """
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
     <title>🛒 Premium Store</title>
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f0f2f5; min-height: 100vh; padding: 0; }
+        .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 20px 15px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); position: sticky; top: 0; z-index: 100; }
+        .header-content { max-width: 1400px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px; }
+        .header h1 { color: white; font-size: 1.8em; text-shadow: 2px 2px 4px rgba(0,0,0,0.2); }
+        .header h1 span { font-weight: 300; font-size: 0.6em; opacity: 0.8; display: block; }
+        .header-stats { color: white; background: rgba(255,255,255,0.15); padding: 8px 16px; border-radius: 30px; backdrop-filter: blur(10px); font-size: 0.85em; white-space: nowrap; }
+        .header-stats strong { font-size: 1.2em; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 15px 10px; }
+        .controls { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; background: white; padding: 12px 18px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .controls .count { color: #555; font-size: 0.9em; }
+        .controls .count strong { color: #667eea; font-size: 1.1em; }
+        .controls input { padding: 8px 16px; border: 2px solid #e0e0e0; border-radius: 25px; font-size: 0.9em; width: 200px; transition: all 0.3s ease; outline: none; }
+        .controls input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
+        .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; animation: fadeIn 0.5s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .product-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 15px rgba(0,0,0,0.06); transition: all 0.3s ease; display: flex; flex-direction: column; position: relative; }
+        .product-card:hover { transform: translateY(-5px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
+        .product-image-container { position: relative; height: 200px; overflow: hidden; background: #f8f9fa; }
+        .product-image { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
+        .product-card:hover .product-image { transform: scale(1.05); }
+        .product-image-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, #e0e0e0 0%, #f0f0f0 100%); display: flex; align-items: center; justify-content: center; font-size: 3em; color: #999; }
+        .product-badge { position: absolute; top: 10px; right: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.7em; font-weight: 600; box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3); letter-spacing: 0.5px; text-transform: uppercase; }
+        .product-content { padding: 14px 16px 18px; flex: 1; display: flex; flex-direction: column; }
+        .product-name { font-size: 1.05em; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; line-height: 1.3; min-height: 2.6em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .product-prices { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
+        .product-price-pkr { font-size: 1.5em; font-weight: 800; color: #667eea; }
+        .product-price-pkr::before { content: 'Rs. '; font-weight: 600; }
+        .product-price-usd { font-size: 0.85em; color: #888; font-weight: 500; }
+        .product-price-usd::before { content: '$'; }
+        .product-description { color: #555; font-size: 0.82em; line-height: 1.5; margin: 6px 0 10px; flex: 1; min-height: 2.8em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .product-instructions { background: #f8f9fa; padding: 8px 12px; border-radius: 8px; font-size: 0.78em; color: #666; margin: 6px 0 12px; border-left: 3px solid #667eea; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .product-instructions::before { content: '📋 '; }
+        .buy-btn { background: #25D366; color: white; border: none; padding: 12px 16px; border-radius: 50px; font-size: 0.9em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); }
+        .buy-btn:hover { transform: scale(1.02); box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35); background: #20b85f; }
+        .buy-btn::before { content: '💬'; font-size: 1em; }
+        .empty-message { grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: white; border-radius: 20px; box-shadow: 0 2px 20px rgba(0,0,0,0.06); }
+        .empty-message .icon { font-size: 3em; margin-bottom: 15px; display: block; }
+        .empty-message h2 { color: #333; font-size: 1.3em; margin-bottom: 8px; }
+        .empty-message p { color: #888; font-size: 0.95em; }
+        .footer { text-align: center; padding: 20px 15px; color: #888; font-size: 0.8em; margin-top: 15px; border-top: 1px solid #e0e0e0; }
         
-        body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: #f0f2f5;
-            min-height: 100vh;
-            padding: 0;
-        }
-        
-        /* Header */
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 20px 15px;
-            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
-            position: sticky;
-            top: 0;
-            z-index: 100;
-        }
-        
-        .header-content {
-            max-width: 1400px;
-            margin: 0 auto;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 10px;
-        }
-        
-        .header h1 {
-            color: white;
-            font-size: 1.8em;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .header h1 span {
-            font-weight: 300;
-            font-size: 0.6em;
-            opacity: 0.8;
-            display: block;
-        }
-        
-        .header-stats {
-            color: white;
-            background: rgba(255,255,255,0.15);
-            padding: 8px 16px;
-            border-radius: 30px;
-            backdrop-filter: blur(10px);
-            font-size: 0.85em;
-            white-space: nowrap;
-        }
-        
-        .header-stats strong {
-            font-size: 1.2em;
-        }
-        
-        /* Main Container */
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 15px 10px;
-        }
-        
-        /* Filter/Search Bar */
-        .controls {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            flex-wrap: wrap;
-            gap: 12px;
-            margin-bottom: 20px;
-            background: white;
-            padding: 12px 18px;
-            border-radius: 12px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .controls .count {
-            color: #555;
-            font-size: 0.9em;
-        }
-        
-        .controls .count strong {
-            color: #667eea;
-            font-size: 1.1em;
-        }
-        
-        .controls input {
-            padding: 8px 16px;
-            border: 2px solid #e0e0e0;
-            border-radius: 25px;
-            font-size: 0.9em;
-            width: 200px;
-            transition: all 0.3s ease;
-            outline: none;
-        }
-        
-        .controls input:focus {
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-        }
-        
-        /* Products Grid - Responsive */
-        .products-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            animation: fadeIn 0.5s ease-in;
-        }
-        
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Product Card */
-        .product-card {
-            background: white;
-            border-radius: 16px;
-            overflow: hidden;
-            box-shadow: 0 2px 15px rgba(0,0,0,0.06);
-            transition: all 0.3s ease;
-            display: flex;
-            flex-direction: column;
-            position: relative;
-        }
-        
-        .product-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 8px 30px rgba(0,0,0,0.12);
-        }
-        
-        /* Product Image */
-        .product-image-container {
-            position: relative;
-            height: 200px;
-            overflow: hidden;
-            background: #f8f9fa;
-        }
-        
-        .product-image {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-            transition: transform 0.5s ease;
-        }
-        
-        .product-card:hover .product-image {
-            transform: scale(1.05);
-        }
-        
-        .product-image-placeholder {
-            width: 100%;
-            height: 100%;
-            background: linear-gradient(135deg, #e0e0e0 0%, #f0f0f0 100%);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 3em;
-            color: #999;
-        }
-        
-        .product-badge {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 0.7em;
-            font-weight: 600;
-            box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3);
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-        }
-        
-        /* Product Content */
-        .product-content {
-            padding: 14px 16px 18px;
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-        }
-        
-        .product-name {
-            font-size: 1.05em;
-            font-weight: 700;
-            color: #1a1a2e;
-            margin-bottom: 6px;
-            line-height: 1.3;
-            min-height: 2.6em;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        
-        .product-prices {
-            display: flex;
-            align-items: baseline;
-            gap: 8px;
-            margin: 6px 0 10px;
-            flex-wrap: wrap;
-        }
-        
-        .product-price-pkr {
-            font-size: 1.5em;
-            font-weight: 800;
-            color: #667eea;
-        }
-        
-        .product-price-pkr::before {
-            content: 'Rs. ';
-            font-weight: 600;
-        }
-        
-        .product-price-usd {
-            font-size: 0.85em;
-            color: #888;
-            font-weight: 500;
-        }
-        
-        .product-price-usd::before {
-            content: '$';
-        }
-        
-        .product-description {
-            color: #555;
-            font-size: 0.82em;
-            line-height: 1.5;
-            margin: 6px 0 10px;
-            flex: 1;
-            min-height: 2.8em;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        
-        .product-instructions {
-            background: #f8f9fa;
-            padding: 8px 12px;
-            border-radius: 8px;
-            font-size: 0.78em;
-            color: #666;
-            margin: 6px 0 12px;
-            border-left: 3px solid #667eea;
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        
-        .product-instructions::before {
-            content: '📋 ';
-        }
-        
-        /* Buy Button */
-        .buy-btn {
-            background: #25D366;
-            color: white;
-            border: none;
-            padding: 12px 16px;
-            border-radius: 50px;
-            font-size: 0.9em;
-            font-weight: 700;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            text-decoration: none;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 6px;
-            margin-top: auto;
-            box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25);
-        }
-        
-        .buy-btn:hover {
-            transform: scale(1.02);
-            box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35);
-            background: #20b85f;
-        }
-        
-        .buy-btn::before {
-            content: '💬';
-            font-size: 1em;
-        }
-        
-        /* Empty State */
-        .empty-message {
-            grid-column: 1 / -1;
-            text-align: center;
-            padding: 60px 20px;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 2px 20px rgba(0,0,0,0.06);
-        }
-        
-        .empty-message .icon {
-            font-size: 3em;
-            margin-bottom: 15px;
-            display: block;
-        }
-        
-        .empty-message h2 {
-            color: #333;
-            font-size: 1.3em;
-            margin-bottom: 8px;
-        }
-        
-        .empty-message p {
-            color: #888;
-            font-size: 0.95em;
-        }
-        
-        /* Footer */
-        .footer {
-            text-align: center;
-            padding: 20px 15px;
-            color: #888;
-            font-size: 0.8em;
-            margin-top: 15px;
-            border-top: 1px solid #e0e0e0;
-        }
-        
-        /* ============================================
-           RESPONSIVE BREAKPOINTS
-           ============================================ */
-        
-        /* Mobile: 2 columns */
         @media (max-width: 768px) {
-            .header h1 {
-                font-size: 1.3em;
-            }
-            
-            .header h1 span {
-                font-size: 0.55em;
-            }
-            
-            .header-stats {
-                font-size: 0.7em;
-                padding: 6px 12px;
-            }
-            
-            .controls {
-                flex-direction: row;
-                flex-wrap: wrap;
-                padding: 10px 14px;
-            }
-            
-            .controls .count {
-                font-size: 0.8em;
-            }
-            
-            .controls input {
-                width: 140px;
-                font-size: 0.8em;
-                padding: 6px 14px;
-            }
-            
-            .products-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 10px;
-            }
-            
-            .product-image-container {
-                height: 150px;
-            }
-            
-            .product-content {
-                padding: 10px 12px 14px;
-            }
-            
-            .product-name {
-                font-size: 0.9em;
-                min-height: 2.2em;
-            }
-            
-            .product-price-pkr {
-                font-size: 1.2em;
-            }
-            
-            .product-price-usd {
-                font-size: 0.75em;
-            }
-            
-            .product-description {
-                font-size: 0.75em;
-                min-height: 2.4em;
-            }
-            
-            .product-instructions {
-                font-size: 0.7em;
-                padding: 6px 10px;
-            }
-            
-            .buy-btn {
-                font-size: 0.8em;
-                padding: 10px 12px;
-            }
-            
-            .product-badge {
-                font-size: 0.6em;
-                padding: 3px 10px;
-                top: 8px;
-                right: 8px;
-            }
-            
-            .product-image-placeholder {
-                font-size: 2em;
-            }
+            .header h1 { font-size: 1.3em; }
+            .header h1 span { font-size: 0.55em; }
+            .header-stats { font-size: 0.7em; padding: 6px 12px; }
+            .controls { flex-direction: row; flex-wrap: wrap; padding: 10px 14px; }
+            .controls .count { font-size: 0.8em; }
+            .controls input { width: 140px; font-size: 0.8em; padding: 6px 14px; }
+            .products-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .product-image-container { height: 150px; }
+            .product-content { padding: 10px 12px 14px; }
+            .product-name { font-size: 0.9em; min-height: 2.2em; }
+            .product-price-pkr { font-size: 1.2em; }
+            .product-price-usd { font-size: 0.75em; }
+            .product-description { font-size: 0.75em; min-height: 2.4em; }
+            .product-instructions { font-size: 0.7em; padding: 6px 10px; }
+            .buy-btn { font-size: 0.8em; padding: 10px 12px; }
+            .product-badge { font-size: 0.6em; padding: 3px 10px; top: 8px; right: 8px; }
+            .product-image-placeholder { font-size: 2em; }
         }
-        
-        /* Very small phones: still 2 columns but smaller */
         @media (max-width: 400px) {
-            .products-grid {
-                gap: 8px;
-            }
-            
-            .product-image-container {
-                height: 120px;
-            }
-            
-            .product-name {
-                font-size: 0.8em;
-            }
-            
-            .product-price-pkr {
-                font-size: 1em;
-            }
-            
-            .product-description {
-                font-size: 0.7em;
-            }
-            
-            .product-instructions {
-                font-size: 0.65em;
-                padding: 4px 8px;
-            }
-            
-            .buy-btn {
-                font-size: 0.7em;
-                padding: 8px 10px;
-            }
-            
-            .controls input {
-                width: 100px;
-                font-size: 0.7em;
-            }
+            .products-grid { gap: 8px; }
+            .product-image-container { height: 120px; }
+            .product-name { font-size: 0.8em; }
+            .product-price-pkr { font-size: 1em; }
+            .product-description { font-size: 0.7em; }
+            .product-instructions { font-size: 0.65em; padding: 4px 8px; }
+            .buy-btn { font-size: 0.7em; padding: 8px 10px; }
+            .controls input { width: 100px; font-size: 0.7em; }
         }
-        
-        /* Tablet: 2 columns */
         @media (min-width: 769px) and (max-width: 1024px) {
-            .products-grid {
-                grid-template-columns: repeat(2, 1fr);
-                gap: 20px;
-            }
-            
-            .product-image-container {
-                height: 220px;
-            }
+            .products-grid { grid-template-columns: repeat(2, 1fr); gap: 20px; }
+            .product-image-container { height: 220px; }
         }
-        
-        /* Desktop: 3 columns */
         @media (min-width: 1025px) {
-            .products-grid {
-                grid-template-columns: repeat(3, 1fr);
-                gap: 25px;
-            }
-            
-            .product-image-container {
-                height: 250px;
-            }
-            
-            .header h1 {
-                font-size: 2.2em;
-            }
-            
-            .container {
-                padding: 25px 20px;
-            }
+            .products-grid { grid-template-columns: repeat(3, 1fr); gap: 25px; }
+            .product-image-container { height: 250px; }
+            .header h1 { font-size: 2.2em; }
+            .container { padding: 25px 20px; }
         }
-        
-        /* Large Desktop: still 3 columns but wider */
         @media (min-width: 1400px) {
-            .products-grid {
-                gap: 30px;
-            }
-            
-            .product-image-container {
-                height: 280px;
-            }
+            .products-grid { gap: 30px; }
+            .product-image-container { height: 280px; }
         }
-        
-        /* Scrollbar Style */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        
-        ::-webkit-scrollbar-track {
-            background: #f0f2f5;
-        }
-        
-        ::-webkit-scrollbar-thumb {
-            background: #667eea;
-            border-radius: 10px;
-        }
-        
-        ::-webkit-scrollbar-thumb:hover {
-            background: #764ba2;
-        }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #f0f2f5; }
+        ::-webkit-scrollbar-thumb { background: #667eea; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #764ba2; }
     </style>
 </head>
 <body>
-    <!-- Header -->
     <div class="header">
         <div class="header-content">
-            <h1>
-                🛒 Premium Store
-                <span>Quality Products at Best Prices</span>
-            </h1>
-            <div class="header-stats">
-                📦 <strong>{{ products|length }}</strong> Products
-            </div>
+            <h1>🛒 Premium Store <span>Quality Products at Best Prices</span></h1>
+            <div class="header-stats">📦 <strong>{{ products|length }}</strong> Products</div>
         </div>
     </div>
-    
-    <!-- Main Container -->
     <div class="container">
-        <!-- Controls -->
         <div class="controls">
-            <div class="count">
-                Showing <strong>{{ products|length }}</strong> products
-            </div>
+            <div class="count">Showing <strong>{{ products|length }}</strong> products</div>
             <input type="text" id="searchInput" placeholder="🔍 Search..." onkeyup="filterProducts()">
         </div>
-        
-        <!-- Products Grid -->
         <div class="products-grid" id="productsGrid">
             {% if products %}
                 {% for product in products %}
@@ -621,24 +228,15 @@ HTML_TEMPLATE = """
                         {% endif %}
                         <span class="product-badge">⭐ Featured</span>
                     </div>
-                    
                     <div class="product-content">
                         <div class="product-name">{{ product.name }}</div>
-                        
                         <div class="product-prices">
                             <span class="product-price-pkr">{{ "%.0f"|format(product.price_pkr) }}</span>
                             <span class="product-price-usd">{{ "%.2f"|format(product.price_usd) }}</span>
                         </div>
-                        
                         <div class="product-description">{{ product.description }}</div>
-                        
                         <div class="product-instructions">{{ product.instructions }}</div>
-                        
-                        <a href="https://wa.me/{{ whatsapp_number }}?text={{ product.whatsapp_message | urlencode }}" 
-                           target="_blank" 
-                           class="buy-btn">
-                            Buy Now
-                        </a>
+                        <a href="https://wa.me/{{ whatsapp_number }}?text={{ product.whatsapp_message | urlencode }}" target="_blank" class="buy-btn">Buy Now</a>
                     </div>
                 </div>
                 {% endfor %}
@@ -650,19 +248,14 @@ HTML_TEMPLATE = """
                 </div>
             {% endif %}
         </div>
-        
-        <div class="footer">
-            <p>🏪 Powered by Telegram Bot | Admin Dashboard Available</p>
-        </div>
+        <div class="footer"><p>🏪 Powered by Telegram Bot | Admin Dashboard Available</p></div>
     </div>
-    
     <script>
         function filterProducts() {
             const input = document.getElementById('searchInput');
             const filter = input.value.toLowerCase();
             const cards = document.getElementsByClassName('product-card');
             let visibleCount = 0;
-            
             for (let card of cards) {
                 const name = card.getAttribute('data-name');
                 if (name.includes(filter)) {
@@ -672,8 +265,6 @@ HTML_TEMPLATE = """
                     card.style.display = 'none';
                 }
             }
-            
-            // Update count
             const countElement = document.querySelector('.controls .count strong');
             if (countElement) {
                 countElement.textContent = visibleCount;
@@ -686,6 +277,7 @@ HTML_TEMPLATE = """
 
 @app.route('/')
 def home():
+    logger.info(f"🏠 Home page requested - {len(products)} products available")
     return render_template_string(
         HTML_TEMPLATE,
         products=products,
@@ -694,19 +286,35 @@ def home():
 
 @app.route('/api/products')
 def api_products():
-    """API endpoint to get products"""
+    logger.info(f"📡 API products requested - {len(products)} products")
     return jsonify(products)
 
 @app.route('/images/<filename>')
 def get_image(filename):
-    """Serve product images"""
     try:
         return send_file(os.path.join(IMAGES_FOLDER, filename))
     except:
         return "Image not found", 404
 
+@app.route('/debug')
+def debug():
+    """Debug endpoint to check storage"""
+    info = {
+        "base_dir": BASE_DIR,
+        "products_file": PRODUCTS_FILE,
+        "file_exists": os.path.exists(PRODUCTS_FILE),
+        "products_count": len(products),
+        "products": products,
+        "images_folder": IMAGES_FOLDER,
+        "images_exist": os.path.exists(IMAGES_FOLDER)
+    }
+    if os.path.exists(PRODUCTS_FILE):
+        with open(PRODUCTS_FILE, 'r') as f:
+            info["file_content"] = json.load(f)
+    return jsonify(info)
+
 # ============================================
-# TELEGRAM BOT - USING REQUESTS
+# TELEGRAM BOT FUNCTIONS
 # ============================================
 
 def send_telegram_message(chat_id, text, parse_mode='Markdown'):
@@ -718,31 +326,32 @@ def send_telegram_message(chat_id, text, parse_mode='Markdown'):
         'parse_mode': parse_mode
     }
     try:
-        response = requests.post(url, json=payload)
+        response = requests.post(url, json=payload, timeout=10)
+        logger.info(f"📤 Sent message to {chat_id}: {text[:50]}...")
         return response.json()
     except Exception as e:
-        print(f"Error sending Telegram message: {e}")
+        logger.error(f"❌ Error sending Telegram message: {e}")
         return None
 
 def download_telegram_file(file_id):
     """Download a file from Telegram"""
     try:
-        # Get file path
         url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getFile"
-        response = requests.get(url, params={'file_id': file_id})
+        response = requests.get(url, params={'file_id': file_id}, timeout=10)
         file_info = response.json()
         
         if not file_info.get('ok'):
+            logger.error(f"❌ Failed to get file info: {file_info}")
             return None
         
         file_path = file_info['result']['file_path']
         file_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
         
-        # Download file
-        response = requests.get(file_url)
+        response = requests.get(file_url, timeout=30)
+        logger.info(f"📥 Downloaded file from Telegram: {file_path}")
         return response.content
     except Exception as e:
-        print(f"Error downloading file: {e}")
+        logger.error(f"❌ Error downloading file: {e}")
         return None
 
 def get_telegram_updates(offset=None):
@@ -752,10 +361,13 @@ def get_telegram_updates(offset=None):
     if offset:
         params['offset'] = offset
     try:
-        response = requests.get(url, params=params)
-        return response.json().get('result', [])
+        response = requests.get(url, params=params, timeout=35)
+        result = response.json().get('result', [])
+        if result:
+            logger.info(f"📩 Received {len(result)} update(s)")
+        return result
     except Exception as e:
-        print(f"Error getting updates: {e}")
+        logger.error(f"❌ Error getting updates: {e}")
         return []
 
 def process_telegram_command(update):
@@ -765,40 +377,29 @@ def process_telegram_command(update):
         text = message.get('text', '')
         chat_id = message['chat']['id']
         
+        logger.info(f"📩 Processing message from {chat_id}: {text[:50]}")
+        
         # Check for photo attachment
         photo = message.get('photo')
         has_image = False
         image_file_id = None
         
-        # Check for photo in caption or as separate entity
         if photo:
-            # Get the largest photo
             photo_sizes = sorted(photo, key=lambda x: x.get('file_size', 0))
             image_file_id = photo_sizes[-1]['file_id'] if photo_sizes else None
             has_image = True
-            
-            # If there's a caption, it might contain the command
             caption = message.get('caption', '')
             if caption:
-                text = caption  # Use caption as the command text
+                text = caption
+                logger.info(f"📸 Message has image with caption: {text[:50]}")
         
         # Only allow admin
         if str(chat_id) != ADMIN_CHAT_ID:
+            logger.warning(f"⛔ Unauthorized access attempt from {chat_id}")
             send_telegram_message(chat_id, "⛔ Access denied. You are not authorized to use this bot.")
             return
         
-        # Handle commands without text (just image)
-        if not text and has_image:
-            send_telegram_message(chat_id, 
-                "📸 Image received!\n\n"
-                "To add a product with this image, send:\n"
-                "/add Name | PKR Price | USD Price | Description | Instructions | WhatsApp Message\n\n"
-                "Or edit a product with:\n"
-                "/edit ID | Name | PKR Price | USD Price | Description | Instructions | WhatsApp Message"
-            )
-            return
-        
-        # Parse command
+        # Handle commands
         if text.startswith('/start'):
             send_telegram_message(chat_id, 
                 "👋 Welcome Admin!\n\n"
@@ -817,22 +418,7 @@ def process_telegram_command(update):
                 "📸 *To add image:* Attach a photo with the /add or /edit command\n"
                 "💰 *Price Format:* PKR first, then USD"
             )
-        
-        elif text.startswith('/help'):
-            send_telegram_message(chat_id,
-                "📚 Admin Commands Guide\n\n"
-                "*Add Product with Image:*\n"
-                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`\n"
-                "2. *Attach a photo* with the message\n\n"
-                "*Edit Product:*\n"
-                "/edit 1 | New Name | 270000 | 999.99 | New description | New instructions | New message\n"
-                "*Attach new image to update photo*\n\n"
-                "*Delete Product:*\n"
-                "/delete 1\n\n"
-                "*View Image:*\n"
-                "/image 1\n\n"
-                "💰 *Prices:* PKR first, then USD"
-            )
+            logger.info(f"✅ Sent /start response to {chat_id}")
         
         elif text.startswith('/products'):
             if not products:
@@ -882,8 +468,23 @@ def process_telegram_command(update):
             
             send_telegram_message(chat_id, stats_text)
         
+        elif text.startswith('/help'):
+            send_telegram_message(chat_id,
+                "📚 Admin Commands Guide\n\n"
+                "*Add Product with Image:*\n"
+                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`\n"
+                "2. *Attach a photo* with the message\n\n"
+                "*Edit Product:*\n"
+                "/edit 1 | New Name | 270000 | 999.99 | New description | New instructions | New message\n"
+                "*Attach new image to update photo*\n\n"
+                "*Delete Product:*\n"
+                "/delete 1\n\n"
+                "*View Image:*\n"
+                "/image 1\n\n"
+                "💰 *Prices:* PKR first, then USD"
+            )
+        
         else:
-            # Check if it's a plain image with no command
             if has_image and not text:
                 send_telegram_message(chat_id, 
                     "📸 Image received!\n\n"
@@ -895,7 +496,7 @@ def process_telegram_command(update):
                 send_telegram_message(chat_id, "❌ Unknown command. Send /help for available commands.")
             
     except Exception as e:
-        print(f"Error processing command: {e}")
+        logger.error(f"❌ Error processing command: {e}")
         send_telegram_message(chat_id, f"❌ Error: {str(e)}")
 
 def save_product_image(image_file_id, product_id):
@@ -903,36 +504,34 @@ def save_product_image(image_file_id, product_id):
     try:
         image_data = download_telegram_file(image_file_id)
         if image_data:
-            # Compress and save image
             img = Image.open(BytesIO(image_data))
             
-            # Resize if too large
             max_size = (800, 800)
             if img.size[0] > max_size[0] or img.size[1] > max_size[1]:
                 img.thumbnail(max_size, Image.LANCZOS)
             
-            # Save to file
             filename = f"product_{product_id}.jpg"
             filepath = os.path.join(IMAGES_FOLDER, filename)
             img.save(filepath, 'JPEG', quality=85, optimize=True)
             
-            # Convert to base64 for web display
             buffered = BytesIO()
             img.save(buffered, format="JPEG", quality=85, optimize=True)
             img_base64 = base64.b64encode(buffered.getvalue()).decode('utf-8')
             
+            logger.info(f"📸 Saved image for product {product_id}: {filepath}")
             return filename, img_base64
         return None, None
     except Exception as e:
-        print(f"Error saving image: {e}")
+        logger.error(f"❌ Error saving image: {e}")
         return None, None
 
 def process_add_product(chat_id, text, image_file_id, has_image):
     """Process add product command"""
-    global next_product_id
+    global next_product_id, products
     
     try:
-        # Remove /add and split by |
+        logger.info(f"➕ Adding product from: {text[:100]}")
+        
         command_parts = text.replace('/add', '').strip()
         parts = [p.strip() for p in command_parts.split('|')]
         
@@ -969,31 +568,39 @@ def process_add_product(chat_id, text, image_file_id, has_image):
                 new_product['image_filename'] = filename
                 new_product['image_base64'] = img_base64
                 new_product['has_image'] = True
-                send_telegram_message(chat_id, "📸 Image saved successfully!")
+                logger.info(f"📸 Image attached to product {next_product_id}")
         
         products.append(new_product)
-        save_products(products)
-        next_product_id += 1
+        save_success = save_products(products)
         
-        response = f"✅ *Product Added Successfully!*\n\n"
-        response += f"📦 Name: {name}\n"
-        response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
-        response += f"🆔 ID: {new_product['id']}\n"
-        if new_product.get('has_image', False):
-            response += f"📸 Image: Yes\n"
-        response += f"\n🔗 Website updated automatically!"
-        
-        send_telegram_message(chat_id, response)
+        if save_success:
+            next_product_id += 1
+            logger.info(f"✅ Product added successfully: {name} (ID: {new_product['id']})")
+            
+            response = f"✅ *Product Added Successfully!*\n\n"
+            response += f"📦 Name: {name}\n"
+            response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
+            response += f"🆔 ID: {new_product['id']}\n"
+            if new_product.get('has_image', False):
+                response += f"📸 Image: Yes\n"
+            response += f"\n🔗 Website updated automatically!"
+            
+            send_telegram_message(chat_id, response)
+        else:
+            send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
         
     except ValueError as e:
+        logger.error(f"❌ Invalid price format: {e}")
         send_telegram_message(chat_id, f"❌ Invalid price format. Please enter valid numbers. Error: {e}")
     except Exception as e:
+        logger.error(f"❌ Error adding product: {e}")
         send_telegram_message(chat_id, f"❌ Error adding product: {str(e)}")
 
 def process_edit_product(chat_id, text, image_file_id, has_image):
     """Process edit product command"""
     try:
-        # Remove /edit and split by |
+        logger.info(f"✏️ Editing product from: {text[:100]}")
+        
         command_parts = text.replace('/edit', '').strip()
         parts = [p.strip() for p in command_parts.split('|')]
         
@@ -1022,63 +629,71 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
                 p['instructions'] = instructions
                 p['whatsapp_message'] = whatsapp_message
                 
-                # Update image if new one is attached
                 if has_image and image_file_id:
                     filename, img_base64 = save_product_image(image_file_id, product_id)
                     if filename and img_base64:
-                        # Delete old image if exists
                         if p.get('image_filename'):
                             try:
                                 os.remove(os.path.join(IMAGES_FOLDER, p['image_filename']))
                             except:
                                 pass
-                        
                         p['image_filename'] = filename
                         p['image_base64'] = img_base64
                         p['has_image'] = True
-                        send_telegram_message(chat_id, "📸 Image updated successfully!")
+                        logger.info(f"📸 Image updated for product {product_id}")
                 
-                save_products(products)
+                save_success = save_products(products)
                 
-                response = f"✅ *Product Updated Successfully!*\n\n"
-                response += f"🆔 ID: {product_id}\n"
-                response += f"📦 Name: {name}\n"
-                response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
-                if p.get('has_image', False):
-                    response += f"📸 Has Image\n"
-                
-                send_telegram_message(chat_id, response)
+                if save_success:
+                    logger.info(f"✅ Product updated successfully: {name} (ID: {product_id})")
+                    response = f"✅ *Product Updated Successfully!*\n\n"
+                    response += f"🆔 ID: {product_id}\n"
+                    response += f"📦 Name: {name}\n"
+                    response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
+                    if p.get('has_image', False):
+                        response += f"📸 Has Image\n"
+                    send_telegram_message(chat_id, response)
+                else:
+                    send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
                 return
         
         send_telegram_message(chat_id, f"❌ Product with ID {product_id} not found.")
         
-    except ValueError:
+    except ValueError as e:
+        logger.error(f"❌ Invalid input: {e}")
         send_telegram_message(chat_id, "❌ Invalid price format or ID. Please check your input.")
     except Exception as e:
+        logger.error(f"❌ Error updating product: {e}")
         send_telegram_message(chat_id, f"❌ Error updating product: {str(e)}")
 
 def process_delete_product(chat_id, text):
     """Process delete product command"""
     try:
         product_id = int(text.replace('/delete', '').strip())
+        logger.info(f"🗑️ Deleting product ID: {product_id}")
         
         for i, p in enumerate(products):
             if p['id'] == product_id:
                 removed_product = products.pop(i)
                 
-                # Remove image file if exists
                 if p.get('image_filename'):
                     try:
                         os.remove(os.path.join(IMAGES_FOLDER, p['image_filename']))
+                        logger.info(f"🗑️ Deleted image for product {product_id}")
                     except:
                         pass
                 
-                save_products(products)
-                send_telegram_message(chat_id,
-                    f"✅ *Product Deleted Successfully!*\n\n"
-                    f"📦 Name: {removed_product['name']}\n"
-                    f"🆔 ID: {removed_product['id']}"
-                )
+                save_success = save_products(products)
+                
+                if save_success:
+                    logger.info(f"✅ Product deleted successfully: {removed_product['name']} (ID: {product_id})")
+                    send_telegram_message(chat_id,
+                        f"✅ *Product Deleted Successfully!*\n\n"
+                        f"📦 Name: {removed_product['name']}\n"
+                        f"🆔 ID: {removed_product['id']}"
+                    )
+                else:
+                    send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
                 return
         
         send_telegram_message(chat_id, f"❌ Product with ID {product_id} not found.")
@@ -1086,25 +701,26 @@ def process_delete_product(chat_id, text):
     except ValueError:
         send_telegram_message(chat_id, "❌ Please provide a valid product ID (number).")
     except Exception as e:
+        logger.error(f"❌ Error deleting product: {e}")
         send_telegram_message(chat_id, f"❌ Error deleting product: {str(e)}")
 
 def process_get_image(chat_id, text):
     """Process get image command"""
     try:
         product_id = int(text.replace('/image', '').strip())
+        logger.info(f"🖼️ Getting image for product ID: {product_id}")
         
         for p in products:
             if p['id'] == product_id:
                 if p.get('has_image', False) and p.get('image_filename'):
-                    # Send the image file
                     filepath = os.path.join(IMAGES_FOLDER, p['image_filename'])
                     if os.path.exists(filepath):
                         with open(filepath, 'rb') as f:
-                            # Upload to Telegram
                             url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
                             files = {'photo': f}
                             data = {'chat_id': chat_id}
                             response = requests.post(url, files=files, data=data)
+                            logger.info(f"📸 Sent image for product {product_id}")
                             return
                 
                 send_telegram_message(chat_id, f"❌ No image found for product {product_id}")
@@ -1115,43 +731,110 @@ def process_get_image(chat_id, text):
     except ValueError:
         send_telegram_message(chat_id, "❌ Please provide a valid product ID (number).")
     except Exception as e:
+        logger.error(f"❌ Error: {e}")
         send_telegram_message(chat_id, f"❌ Error: {str(e)}")
 
 # ============================================
-# START BOT IN BACKGROUND (FIX FOR RENDER)
+# START BOT IN BACKGROUND
 # ============================================
 
 def run_telegram_bot():
     """Run the Telegram bot using polling"""
-    print("🤖 Starting Telegram bot...")
+    logger.info("🤖 Starting Telegram bot...")
     last_update_id = 0
+    retry_count = 0
     
     while True:
         try:
+            # Test connection every 60 seconds
+            if retry_count % 30 == 0:
+                test_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getMe"
+                test_response = requests.get(test_url, timeout=10)
+                if test_response.ok:
+                    bot_info = test_response.json()['result']
+                    logger.info(f"✅ Bot connected: @{bot_info['username']}")
+                else:
+                    logger.warning(f"⚠️ Bot connection test failed: {test_response.text}")
+            
             updates = get_telegram_updates(last_update_id + 1 if last_update_id else None)
             
-            for update in updates:
-                if 'message' in update:
-                    print(f"📩 Received message: {update['message'].get('text', 'No text')}")
-                    process_telegram_command(update)
-                    last_update_id = update['update_id']
+            if updates:
+                for update in updates:
+                    if 'message' in update:
+                        process_telegram_command(update)
+                        last_update_id = update['update_id']
+                retry_count = 0
+            else:
+                if retry_count % 60 == 0:  # Log every 60 attempts
+                    logger.info("⏳ Waiting for messages...")
             
-            time.sleep(2)  # Short delay to prevent excessive CPU usage
+            time.sleep(2)
+            retry_count += 1
             
         except Exception as e:
-            print(f"❌ Bot error: {e}")
+            logger.error(f"❌ Bot error: {e}")
             time.sleep(10)
 
-# Start the bot in a background thread when the app starts
-bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
-bot_thread.start()
-print("✅ Bot thread started")
+# ============================================
+# ADD TEST PRODUCTS
+# ============================================
+
+def add_test_products():
+    """Add test products if none exist"""
+    global products, next_product_id
+    
+    if not products:
+        logger.info("📦 No products found, adding test products...")
+        test_products = [
+            {
+                "id": 1,
+                "name": "Cordless Drill Kit",
+                "price_pkr": 8500,
+                "price_usd": 75.99,
+                "description": "Professional grade drill with 2 batteries",
+                "instructions": "Free delivery within 3 days",
+                "whatsapp_message": "I want to order the Cordless Drill Kit",
+                "has_image": False
+            },
+            {
+                "id": 2,
+                "name": "Digital Multimeter",
+                "price_pkr": 3500,
+                "price_usd": 29.99,
+                "description": "Accurate measurements for professionals",
+                "instructions": "Includes testing leads and manual",
+                "whatsapp_message": "I want to order the Digital Multimeter",
+                "has_image": False
+            }
+        ]
+        products = test_products
+        if save_products(products):
+            next_product_id = max([p["id"] for p in products]) + 1
+            logger.info(f"✅ Added {len(products)} test products")
+        else:
+            logger.error("❌ Failed to save test products")
 
 # ============================================
-# START FLASK APP
+# START APPLICATION
+# ============================================
+
+# Add test products
+add_test_products()
+
+# Start bot thread
+try:
+    logger.info("🚀 Starting bot thread...")
+    bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
+    bot_thread.start()
+    logger.info("✅ Bot thread started successfully")
+except Exception as e:
+    logger.error(f"❌ Failed to start bot thread: {e}")
+
+# ============================================
+# MAIN ENTRY POINT
 # ============================================
 
 if __name__ == "__main__":
-    print("🚀 Starting Flask app...")
+    logger.info("🚀 Starting Flask app...")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
