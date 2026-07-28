@@ -1060,3 +1060,102 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
 def process_delete_product(chat_id, text):
     """Process delete product command"""
     try:
+        product_id = int(text.replace('/delete', '').strip())
+        
+        for i, p in enumerate(products):
+            if p['id'] == product_id:
+                removed_product = products.pop(i)
+                
+                # Remove image file if exists
+                if p.get('image_filename'):
+                    try:
+                        os.remove(os.path.join(IMAGES_FOLDER, p['image_filename']))
+                    except:
+                        pass
+                
+                save_products(products)
+                send_telegram_message(chat_id,
+                    f"✅ *Product Deleted Successfully!*\n\n"
+                    f"📦 Name: {removed_product['name']}\n"
+                    f"🆔 ID: {removed_product['id']}"
+                )
+                return
+        
+        send_telegram_message(chat_id, f"❌ Product with ID {product_id} not found.")
+        
+    except ValueError:
+        send_telegram_message(chat_id, "❌ Please provide a valid product ID (number).")
+    except Exception as e:
+        send_telegram_message(chat_id, f"❌ Error deleting product: {str(e)}")
+
+def process_get_image(chat_id, text):
+    """Process get image command"""
+    try:
+        product_id = int(text.replace('/image', '').strip())
+        
+        for p in products:
+            if p['id'] == product_id:
+                if p.get('has_image', False) and p.get('image_filename'):
+                    # Send the image file
+                    filepath = os.path.join(IMAGES_FOLDER, p['image_filename'])
+                    if os.path.exists(filepath):
+                        with open(filepath, 'rb') as f:
+                            # Upload to Telegram
+                            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto"
+                            files = {'photo': f}
+                            data = {'chat_id': chat_id}
+                            response = requests.post(url, files=files, data=data)
+                            return
+                
+                send_telegram_message(chat_id, f"❌ No image found for product {product_id}")
+                return
+        
+        send_telegram_message(chat_id, f"❌ Product with ID {product_id} not found.")
+        
+    except ValueError:
+        send_telegram_message(chat_id, "❌ Please provide a valid product ID (number).")
+    except Exception as e:
+        send_telegram_message(chat_id, f"❌ Error: {str(e)}")
+
+def run_telegram_bot():
+    """Run the Telegram bot using polling"""
+    print("\n🤖 Telegram Bot Started Successfully!")
+    print("📱 Bot is ready to receive commands!\n")
+    
+    last_update_id = 0
+    
+    while True:
+        try:
+            # Get updates
+            updates = get_telegram_updates(last_update_id + 1 if last_update_id else None)
+            
+            for update in updates:
+                if 'message' in update:
+                    process_telegram_command(update)
+                    last_update_id = update['update_id']
+            
+            time.sleep(1)
+            
+        except Exception as e:
+            print(f"Bot error: {e}")
+            time.sleep(5)
+
+# ============================================
+# START FLASK APP
+# ============================================
+
+if __name__ == "__main__":
+    print("\n" + "="*50)
+    print("🛍️ PREMIUM STORE - RENDER DEPLOYMENT")
+    print("="*50 + "\n")
+    
+    # Start Telegram bot in background
+    print("🤖 Starting Telegram bot...")
+    bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
+    bot_thread.start()
+    time.sleep(2)
+    
+    # Start Flask app
+    print("🚀 Starting Flask web server...")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
