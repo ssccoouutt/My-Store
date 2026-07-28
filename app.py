@@ -1117,45 +1117,41 @@ def process_get_image(chat_id, text):
     except Exception as e:
         send_telegram_message(chat_id, f"❌ Error: {str(e)}")
 
+# ============================================
+# START BOT IN BACKGROUND (FIX FOR RENDER)
+# ============================================
+
 def run_telegram_bot():
     """Run the Telegram bot using polling"""
-    print("\n🤖 Telegram Bot Started Successfully!")
-    print("📱 Bot is ready to receive commands!\n")
-    
+    print("🤖 Starting Telegram bot...")
     last_update_id = 0
     
     while True:
         try:
-            # Get updates
             updates = get_telegram_updates(last_update_id + 1 if last_update_id else None)
             
             for update in updates:
                 if 'message' in update:
+                    print(f"📩 Received message: {update['message'].get('text', 'No text')}")
                     process_telegram_command(update)
                     last_update_id = update['update_id']
             
-            time.sleep(1)
+            time.sleep(2)  # Short delay to prevent excessive CPU usage
             
         except Exception as e:
-            print(f"Bot error: {e}")
-            time.sleep(5)
+            print(f"❌ Bot error: {e}")
+            time.sleep(10)
+
+# Start the bot in a background thread when the app starts
+bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
+bot_thread.start()
+print("✅ Bot thread started")
 
 # ============================================
 # START FLASK APP
 # ============================================
 
 if __name__ == "__main__":
-    print("\n" + "="*50)
-    print("🛍️ PREMIUM STORE - RENDER DEPLOYMENT")
-    print("="*50 + "\n")
-    
-    # Start Telegram bot in background
-    print("🤖 Starting Telegram bot...")
-    bot_thread = threading.Thread(target=run_telegram_bot, daemon=True)
-    bot_thread.start()
-    time.sleep(2)
-    
-    # Start Flask app
-    print("🚀 Starting Flask web server...")
+    print("🚀 Starting Flask app...")
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
