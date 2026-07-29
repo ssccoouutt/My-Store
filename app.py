@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - UPDATED COMMANDS
+# COMPLETE STORE SCRIPT - WITH MODAL POPUP
 # ============================================
 
 import threading
@@ -86,13 +86,24 @@ def save_products(products):
         logger.error(f"❌ Error saving products: {e}")
         return False
 
+def format_telegram_bold(text):
+    """Convert Telegram bold (**text**) to HTML bold (<b>text</b>)"""
+    import re
+    # Convert **text** to <b>text</b>
+    text = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', text)
+    # Convert __text__ to <i>text</i> (optional)
+    text = re.sub(r'__(.+?)__', r'<i>\1</i>', text)
+    # Convert `text` to <code>text</code> (optional)
+    text = re.sub(r'`(.+?)`', r'<code>\1</code>', text)
+    return text
+
 # ============================================
 # FLASK WEB APP
 # ============================================
 
 app = Flask(__name__)
 
-# HTML Template with "See More" functionality
+# HTML Template with Modal Popup
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -117,13 +128,13 @@ HTML_TEMPLATE = """
         .controls input:focus { border-color: #667eea; box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1); }
         .products-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; animation: fadeIn 0.5s ease-in; }
         @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-        .product-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 15px rgba(0,0,0,0.06); transition: all 0.3s ease; display: flex; flex-direction: column; position: relative; }
+        .product-card { background: white; border-radius: 16px; overflow: hidden; box-shadow: 0 2px 15px rgba(0,0,0,0.06); transition: all 0.3s ease; display: flex; flex-direction: column; position: relative; cursor: pointer; }
         .product-card:hover { transform: translateY(-5px); box-shadow: 0 8px 30px rgba(0,0,0,0.12); }
         .product-image-container { position: relative; height: 200px; overflow: hidden; background: #f8f9fa; }
         .product-image { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s ease; }
         .product-card:hover .product-image { transform: scale(1.05); }
         .product-image-placeholder { width: 100%; height: 100%; background: linear-gradient(135deg, #e0e0e0 0%, #f0f0f0 100%); display: flex; align-items: center; justify-content: center; font-size: 3em; color: #999; }
-        .product-badge { position: absolute; top: 10px; right: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.7em; font-weight: 600; box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3); letter-spacing: 0.5px; text-transform: uppercase; }
+        .product-badge { position: absolute; top: 10px; right: 10px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 4px 12px; border-radius: 20px; font-size: 0.7em; font-weight: 600; box-shadow: 0 2px 10px rgba(102, 126, 234, 0.3); letter-spacing: 0.5px; text-transform: uppercase; pointer-events: none; }
         .product-content { padding: 14px 16px 18px; flex: 1; display: flex; flex-direction: column; }
         .product-name { font-size: 1.05em; font-weight: 700; color: #1a1a2e; margin-bottom: 6px; line-height: 1.3; min-height: 2.6em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         .product-prices { display: flex; align-items: baseline; gap: 8px; margin: 6px 0 10px; flex-wrap: wrap; }
@@ -131,14 +142,8 @@ HTML_TEMPLATE = """
         .product-price-pkr::before { content: 'Rs. '; font-weight: 600; }
         .product-price-usd { font-size: 0.85em; color: #888; font-weight: 500; }
         .product-price-usd::before { content: '$'; }
-        .product-about { color: #555; font-size: 0.9em; line-height: 1.5; margin: 6px 0 10px; font-weight: 500; }
-        .product-description { color: #666; font-size: 0.85em; line-height: 1.6; margin: 6px 0 10px; }
-        .product-description-short { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-        .product-description-full { display: none; }
-        .product-description-full.show { display: block; }
-        .see-more-btn { background: none; border: none; color: #667eea; font-weight: 600; cursor: pointer; padding: 5px 0; font-size: 0.85em; text-decoration: underline; }
-        .see-more-btn:hover { color: #764ba2; }
-        .buy-btn { background: #25D366; color: white; border: none; padding: 12px 16px; border-radius: 50px; font-size: 0.9em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); }
+        .product-about { background: #f8f9fa; padding: 10px 14px; border-radius: 10px; font-size: 0.85em; color: #555; margin: 6px 0 10px; border-left: 3px solid #667eea; line-height: 1.5; font-weight: 500; }
+        .buy-btn { background: #25D366; color: white; border: none; padding: 12px 16px; border-radius: 50px; font-size: 0.9em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); pointer-events: auto; position: relative; z-index: 10; }
         .buy-btn:hover { transform: scale(1.02); box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35); background: #20b85f; }
         .buy-btn::before { content: '💬'; font-size: 1em; }
         .empty-message { grid-column: 1 / -1; text-align: center; padding: 60px 20px; background: white; border-radius: 20px; box-shadow: 0 2px 20px rgba(0,0,0,0.06); }
@@ -147,6 +152,28 @@ HTML_TEMPLATE = """
         .empty-message p { color: #888; font-size: 0.95em; }
         .footer { text-align: center; padding: 20px 15px; color: #888; font-size: 0.9em; margin-top: 15px; border-top: 1px solid #e0e0e0; }
         .footer strong { color: #667eea; }
+        
+        /* Modal Styles */
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); overflow-y: auto; animation: fadeIn 0.3s ease; }
+        .modal-content { background: white; margin: 30px auto; padding: 0; border-radius: 20px; max-width: 500px; width: 95%; position: relative; animation: slideUp 0.3s ease; box-shadow: 0 20px 60px rgba(0,0,0,0.3); }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(50px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-close { position: absolute; top: 15px; right: 20px; font-size: 2em; color: #888; cursor: pointer; transition: 0.3s; z-index: 10; }
+        .modal-close:hover { color: #333; transform: rotate(90deg); }
+        .modal-image { width: 100%; height: 300px; object-fit: cover; border-radius: 20px 20px 0 0; }
+        .modal-image-placeholder { width: 100%; height: 300px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); display: flex; align-items: center; justify-content: center; font-size: 5em; color: white; border-radius: 20px 20px 0 0; }
+        .modal-body { padding: 25px; }
+        .modal-name { font-size: 1.8em; font-weight: 700; color: #1a1a2e; margin-bottom: 8px; }
+        .modal-prices { display: flex; align-items: baseline; gap: 12px; margin: 10px 0 15px; flex-wrap: wrap; }
+        .modal-price-pkr { font-size: 2em; font-weight: 800; color: #667eea; }
+        .modal-price-pkr::before { content: 'Rs. '; font-weight: 600; }
+        .modal-price-usd { font-size: 1em; color: #888; font-weight: 500; }
+        .modal-price-usd::before { content: '$'; }
+        .modal-about { background: #f8f9fa; padding: 12px 16px; border-radius: 10px; font-size: 0.95em; color: #555; margin: 12px 0 15px; border-left: 3px solid #667eea; line-height: 1.6; font-weight: 500; }
+        .modal-description { color: #444; font-size: 0.95em; line-height: 1.8; margin: 12px 0 20px; white-space: pre-wrap; word-wrap: break-word; }
+        .modal-description b { color: #667eea; }
+        .modal-buy-btn { background: #25D366; color: white; border: none; padding: 16px 30px; border-radius: 50px; font-size: 1.1em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; box-shadow: 0 4px 20px rgba(37, 211, 102, 0.3); }
+        .modal-buy-btn:hover { transform: scale(1.02); box-shadow: 0 6px 30px rgba(37, 211, 102, 0.4); background: #20b85f; }
+        .modal-buy-btn::before { content: '💬'; font-size: 1.2em; }
         
         @media (max-width: 768px) {
             .header h1 { font-size: 1.3em; }
@@ -161,11 +188,16 @@ HTML_TEMPLATE = """
             .product-name { font-size: 0.9em; min-height: 2.2em; }
             .product-price-pkr { font-size: 1.2em; }
             .product-price-usd { font-size: 0.75em; }
-            .product-about { font-size: 0.8em; }
-            .product-description { font-size: 0.75em; }
+            .product-about { font-size: 0.75em; padding: 8px 10px; }
             .buy-btn { font-size: 0.8em; padding: 10px 12px; }
             .product-badge { font-size: 0.6em; padding: 3px 10px; top: 8px; right: 8px; }
             .product-image-placeholder { font-size: 2em; }
+            .modal-content { margin: 15px auto; width: 98%; }
+            .modal-image { height: 200px; }
+            .modal-image-placeholder { height: 200px; font-size: 3em; }
+            .modal-body { padding: 18px; }
+            .modal-name { font-size: 1.4em; }
+            .modal-price-pkr { font-size: 1.6em; }
         }
         @media (max-width: 400px) {
             .products-grid { gap: 8px; }
@@ -173,7 +205,6 @@ HTML_TEMPLATE = """
             .product-name { font-size: 0.8em; }
             .product-price-pkr { font-size: 1em; }
             .product-about { font-size: 0.7em; }
-            .product-description { font-size: 0.7em; }
             .buy-btn { font-size: 0.7em; padding: 8px 10px; }
             .controls input { width: 100px; font-size: 0.7em; }
         }
@@ -212,7 +243,7 @@ HTML_TEMPLATE = """
         <div class="products-grid" id="productsGrid">
             {% if products %}
                 {% for product in products %}
-                <div class="product-card" data-name="{{ product.name|lower }}" data-id="{{ product.id }}">
+                <div class="product-card" onclick="openModal({{ product.id }})" data-name="{{ product.name|lower }}" data-id="{{ product.id }}">
                     <div class="product-image-container">
                         {% if product.image_base64 %}
                             <img src="data:image/jpeg;base64,{{ product.image_base64 }}" class="product-image" alt="{{ product.name }}">
@@ -228,20 +259,7 @@ HTML_TEMPLATE = """
                             <span class="product-price-usd">{{ "%.2f"|format(product.price_usd) }}</span>
                         </div>
                         <div class="product-about">{{ product.about }}</div>
-                        <div class="product-description">
-                            <div class="product-description-short" id="short-{{ product.id }}">
-                                {{ product.description[:150] }}{% if product.description|length > 150 %}...{% endif %}
-                            </div>
-                            <div class="product-description-full" id="full-{{ product.id }}">
-                                {{ product.description }}
-                            </div>
-                            {% if product.description|length > 150 %}
-                            <button class="see-more-btn" onclick="toggleDescription({{ product.id }})" id="btn-{{ product.id }}">
-                                See More
-                            </button>
-                            {% endif %}
-                        </div>
-                        <a href="https://wa.me/{{ whatsapp_number }}?text={{ product.whatsapp_message | urlencode }}" target="_blank" class="buy-btn">Buy Now</a>
+                        <a href="https://wa.me/{{ whatsapp_number }}?text={{ product.whatsapp_message | urlencode }}" target="_blank" class="buy-btn" onclick="event.stopPropagation();">Buy Now</a>
                     </div>
                 </div>
                 {% endfor %}
@@ -257,7 +275,84 @@ HTML_TEMPLATE = """
             <p>Powered By <strong>Tech Zone</strong></p>
         </div>
     </div>
+    
+    <!-- Modal -->
+    <div id="productModal" class="modal" onclick="closeModalOutside(event)">
+        <div class="modal-content" onclick="event.stopPropagation();">
+            <span class="modal-close" onclick="closeModal()">&times;</span>
+            <div id="modalImageContainer">
+                <div class="modal-image-placeholder">🛍️</div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-name" id="modalName">Product Name</div>
+                <div class="modal-prices">
+                    <span class="modal-price-pkr" id="modalPkr">Rs. 0</span>
+                    <span class="modal-price-usd" id="modalUsd">$0.00</span>
+                </div>
+                <div class="modal-about" id="modalAbout">About the product</div>
+                <div class="modal-description" id="modalDescription">Description goes here</div>
+                <a href="#" target="_blank" id="modalBuyBtn" class="modal-buy-btn">Buy Now on WhatsApp</a>
+            </div>
+        </div>
+    </div>
+    
     <script>
+        // Store product data for modal
+        var productData = {};
+        {% for product in products %}
+        productData[{{ product.id }}] = {
+            name: "{{ product.name|escape }}",
+            price_pkr: "{{ "%.0f"|format(product.price_pkr) }}",
+            price_usd: "{{ "%.2f"|format(product.price_usd) }}",
+            about: "{{ product.about|escape }}",
+            description: `{{ product.description|escape }}`,
+            whatsapp_message: "{{ product.whatsapp_message|escape }}",
+            has_image: {{ 'true' if product.image_base64 else 'false' }},
+            image_base64: "{{ product.image_base64 if product.image_base64 else '' }}"
+        };
+        {% endfor %}
+        
+        function openModal(productId) {
+            var data = productData[productId];
+            if (!data) return;
+            
+            document.getElementById('modalName').textContent = data.name;
+            document.getElementById('modalPkr').textContent = 'Rs. ' + data.price_pkr;
+            document.getElementById('modalUsd').textContent = '$' + data.price_usd;
+            document.getElementById('modalAbout').textContent = data.about;
+            document.getElementById('modalDescription').innerHTML = data.description;
+            document.getElementById('modalBuyBtn').href = 'https://wa.me/{{ whatsapp_number }}?text=' + encodeURIComponent(data.whatsapp_message);
+            
+            // Handle image
+            var imageContainer = document.getElementById('modalImageContainer');
+            if (data.has_image && data.image_base64) {
+                imageContainer.innerHTML = '<img src="data:image/jpeg;base64,' + data.image_base64 + '" class="modal-image" alt="' + data.name + '">';
+            } else {
+                imageContainer.innerHTML = '<div class="modal-image-placeholder">🛍️</div>';
+            }
+            
+            document.getElementById('productModal').style.display = 'block';
+            document.body.style.overflow = 'hidden';
+        }
+        
+        function closeModal() {
+            document.getElementById('productModal').style.display = 'none';
+            document.body.style.overflow = 'auto';
+        }
+        
+        function closeModalOutside(event) {
+            if (event.target === document.getElementById('productModal')) {
+                closeModal();
+            }
+        }
+        
+        // Close modal with ESC key
+        document.addEventListener('keydown', function(event) {
+            if (event.key === 'Escape') {
+                closeModal();
+            }
+        });
+        
         function filterProducts() {
             const input = document.getElementById('searchInput');
             const filter = input.value.toLowerCase();
@@ -275,22 +370,6 @@ HTML_TEMPLATE = """
             const countElement = document.querySelector('.controls .count strong');
             if (countElement) {
                 countElement.textContent = visibleCount;
-            }
-        }
-        
-        function toggleDescription(productId) {
-            const shortEl = document.getElementById('short-' + productId);
-            const fullEl = document.getElementById('full-' + productId);
-            const btnEl = document.getElementById('btn-' + productId);
-            
-            if (fullEl.classList.contains('show')) {
-                fullEl.classList.remove('show');
-                shortEl.style.display = '';
-                btnEl.textContent = 'See More';
-            } else {
-                fullEl.classList.add('show');
-                shortEl.style.display = 'none';
-                btnEl.textContent = 'See Less';
             }
         }
     </script>
@@ -455,6 +534,7 @@ def process_telegram_command(update):
                 "➕ /add Name | PKR Price | USD Price | About | WhatsApp Message\n"
                 "   *Attach image with this command*\n"
                 "   *Then send description as a separate message*\n"
+                "   *Use **bold** in description for emphasis*\n"
                 "✏️ /edit ID | Name | PKR Price | USD Price | About | WhatsApp Message\n"
                 "   *Then send new description as separate message*\n"
                 "🗑️ /delete ID\n"
@@ -463,7 +543,8 @@ def process_telegram_command(update):
                 "ℹ️ /help - Show this message\n\n"
                 "🔒 Admin Only\n\n"
                 "📸 *To add image:* Attach a photo with the /add or /edit command\n"
-                "💰 *Price Format:* PKR first, then USD"
+                "💰 *Price Format:* PKR first, then USD\n"
+                "📝 *Use **bold** in description*"
             )
             logger.info(f"✅ Sent /start response to {chat_id}")
         
@@ -523,7 +604,8 @@ def process_telegram_command(update):
                 "*Add Product with Image:*\n"
                 "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | I want to order`\n"
                 "2. *Attach a photo* with the message\n"
-                "3. *Send the long description* as a separate message\n\n"
+                "3. *Send the long description* as a separate message\n"
+                "   Use **bold** for emphasis\n\n"
                 "*Edit Product:*\n"
                 "/edit 1 | New Name | 270000 | 999.99 | New about | New WhatsApp message\n"
                 "*Then send new description as separate message*\n\n"
@@ -532,8 +614,8 @@ def process_telegram_command(update):
                 "*View Image:*\n"
                 "/image 1\n\n"
                 "💰 *Prices:* PKR first, then USD\n"
-                "📝 *About:* Short description (1-2 lines)\n"
-                "📄 *Description:* Long details (sent separately)"
+                "📝 *About:* Short description (1-2 lines) with border style\n"
+                "📄 *Description:* Long details (sent separately) - **bold** supported"
             )
         
         else:
@@ -594,7 +676,8 @@ def process_add_product_start(chat_id, text, image_file_id, has_image):
             f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
             f"📝 About: {about[:50]}...\n\n"
             "📤 *Now send the long description* as a separate message.\n"
-            "It can be multiple lines long.\n\n"
+            "It can be multiple lines long.\n"
+            "Use **bold** for emphasis if needed.\n\n"
             "Type or paste the description and send it."
         )
         
@@ -621,6 +704,9 @@ def process_product_description(chat_id, description, has_image, image_file_id):
             data['image_file_id'] = image_file_id
             data['has_image'] = True
         
+        # Format description: convert Telegram bold to HTML bold
+        formatted_description = format_telegram_bold(description.strip())
+        
         # Create the product
         products = load_products()
         next_id = max([p["id"] for p in products]) + 1 if products else 1
@@ -631,7 +717,7 @@ def process_product_description(chat_id, description, has_image, image_file_id):
             "price_pkr": data['price_pkr'],
             "price_usd": data['price_usd'],
             "about": data['about'],
-            "description": description.strip(),
+            "description": formatted_description,
             "whatsapp_message": data['whatsapp_message'],
             "has_image": False
         }
@@ -720,7 +806,8 @@ def process_edit_product_start(chat_id, text, image_file_id, has_image):
             f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
             f"📝 About: {about[:50]}...\n\n"
             "📤 *Now send the new long description* as a separate message.\n"
-            "It can be multiple lines long.\n\n"
+            "It can be multiple lines long.\n"
+            "Use **bold** for emphasis if needed.\n\n"
             "Type or paste the description and send it."
         )
         
@@ -747,6 +834,9 @@ def process_edit_description(chat_id, description, has_image, image_file_id):
             data['image_file_id'] = image_file_id
             data['has_image'] = True
         
+        # Format description: convert Telegram bold to HTML bold
+        formatted_description = format_telegram_bold(description.strip())
+        
         # Load and update product
         products = load_products()
         product_id = data['product_id']
@@ -757,7 +847,7 @@ def process_edit_description(chat_id, description, has_image, image_file_id):
                 p['price_pkr'] = data['price_pkr']
                 p['price_usd'] = data['price_usd']
                 p['about'] = data['about']
-                p['description'] = description.strip()
+                p['description'] = formatted_description
                 p['whatsapp_message'] = data['whatsapp_message']
                 
                 # Update image if new one is attached
