@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - WITH FIXED NEWLINES
+# COMPLETE STORE SCRIPT - WITH DUPLICATE NAME HANDLING
 # ============================================
 
 import threading
@@ -493,7 +493,8 @@ def process_telegram_command(update):
                 "📸 *To add image:* Attach a photo with the /add or /edit command\n"
                 "💰 *Price Format:* PKR first, then USD\n"
                 "📝 *About Product:* Description of the product\n"
-                "📋 *Instructions:* Delivery, returns, or other info (supports multi-line text with newlines)"
+                "📋 *Instructions:* Delivery, returns, or other info (supports multi-line text with newlines)\n\n"
+                "🔄 *Duplicate Name:* If product name already exists, it will be updated instead of creating new"
             )
             logger.info(f"✅ Sent /start response to {chat_id}")
         
@@ -562,7 +563,8 @@ def process_telegram_command(update):
                 "/image 1\n\n"
                 "💰 *Prices:* PKR first, then USD\n"
                 "📝 *About Product:* Brief description\n"
-                "📋 *Instructions:* Multi-line text supported (use \\n for new lines)"
+                "📋 *Instructions:* Multi-line text supported (use \\n for new lines)\n\n"
+                "🔄 *Duplicate Name:* Adding a product with same name updates existing product"
             )
         
         else:
@@ -607,7 +609,7 @@ def save_product_image(image_file_id, product_id):
         return None, None
 
 def process_add_product(chat_id, text, image_file_id, has_image):
-    """Process add product command - preserves newlines"""
+    """Process add product command - checks for duplicate names"""
     try:
         logger.info(f"➕ Adding product from: {text[:100]}")
         
@@ -644,52 +646,106 @@ def process_add_product(chat_id, text, image_file_id, has_image):
         # Load current products
         products = load_products()
         
-        # Get next ID
-        next_id = max([p["id"] for p in products]) + 1 if products else 1
+        # Check for duplicate product name
+        existing_product = None
+        for p in products:
+            if p['name'].lower() == name.lower():
+                existing_product = p
+                break
         
-        # Create new product
-        new_product = {
-            "id": next_id,
-            "name": name,
-            "price_pkr": price_pkr,
-            "price_usd": price_usd,
-            "description": description,
-            "instructions": instructions,  # Preserves newlines
-            "whatsapp_message": whatsapp_message,
-            "has_image": False
-        }
-        
-        # Save image if attached
-        if has_image and image_file_id:
-            filename, img_base64 = save_product_image(image_file_id, next_id)
-            if filename and img_base64:
-                new_product['image_filename'] = filename
-                new_product['image_base64'] = img_base64
-                new_product['has_image'] = True
-                logger.info(f"📸 Image attached to product {next_id}")
-        
-        # Add to products list
-        products.append(new_product)
-        
-        # Save to file
-        save_success = save_products(products)
-        
-        if save_success:
-            logger.info(f"✅ Product added successfully: {name} (ID: {new_product['id']})")
+        if existing_product:
+            # Update existing product
+            logger.info(f"🔄 Product '{name}' already exists. Updating instead of adding new.")
             
-            response = f"✅ *Product Added Successfully!*\n\n"
-            response += f"📦 Name: {name}\n"
-            response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
-            response += f"🆔 ID: {new_product['id']}\n"
-            if new_product.get('has_image', False):
-                response += f"📸 Image: Yes\n"
-            response += f"\n🔗 Website updated automatically! (Refresh the page)"
+            # Update fields
+            existing_product['price_pkr'] = price_pkr
+            existing_product['price_usd'] = price_usd
+            existing_product['description'] = description
+            existing_product['instructions'] = instructions
+            existing_product['whatsapp_message'] = whatsapp_message
             
-            send_telegram_message(chat_id, response)
-            logger.info(f"📋 Current products: {[p['name'] for p in products]}")
+            # Update image if attached
+            if has_image and image_file_id:
+                filename, img_base64 = save_product_image(image_file_id, existing_product['id'])
+                if filename and img_base64:
+                    # Delete old image if exists
+                    if existing_product.get('image_filename'):
+                        try:
+                            os.remove(os.path.join(IMAGES_FOLDER, existing_product['image_filename']))
+                        except:
+                            pass
+                    existing_product['image_filename'] = filename
+                    existing_product['image_base64'] = img_base64
+                    existing_product['has_image'] = True
+                    logger.info(f"📸 Image updated for existing product {existing_product['id']}")
+            
+            # Save to file
+            save_success = save_products(products)
+            
+            if save_success:
+                logger.info(f"✅ Product updated successfully: {name} (ID: {existing_product['id']})")
+                
+                response = f"✅ *Product Updated Successfully!*\n\n"
+                response += f"📦 Name: {name}\n"
+                response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
+                response += f"🆔 ID: {existing_product['id']}\n"
+                if existing_product.get('has_image', False):
+                    response += f"📸 Image: Yes\n"
+                response += f"\n🔗 Website updated automatically! (Refresh the page)"
+                response += f"\n\n💡 *Note:* Product name already existed, so it was updated."
+                
+                send_telegram_message(chat_id, response)
+            else:
+                logger.error("❌ Failed to save product to file")
+                send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
+        
         else:
-            logger.error("❌ Failed to save product to file")
-            send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
+            # Create new product
+            # Get next ID
+            next_id = max([p["id"] for p in products]) + 1 if products else 1
+            
+            new_product = {
+                "id": next_id,
+                "name": name,
+                "price_pkr": price_pkr,
+                "price_usd": price_usd,
+                "description": description,
+                "instructions": instructions,
+                "whatsapp_message": whatsapp_message,
+                "has_image": False
+            }
+            
+            # Save image if attached
+            if has_image and image_file_id:
+                filename, img_base64 = save_product_image(image_file_id, next_id)
+                if filename and img_base64:
+                    new_product['image_filename'] = filename
+                    new_product['image_base64'] = img_base64
+                    new_product['has_image'] = True
+                    logger.info(f"📸 Image attached to product {next_id}")
+            
+            # Add to products list
+            products.append(new_product)
+            
+            # Save to file
+            save_success = save_products(products)
+            
+            if save_success:
+                logger.info(f"✅ Product added successfully: {name} (ID: {new_product['id']})")
+                
+                response = f"✅ *Product Added Successfully!*\n\n"
+                response += f"📦 Name: {name}\n"
+                response += f"💰 PKR: Rs.{price_pkr:,.0f} | USD: ${price_usd}\n"
+                response += f"🆔 ID: {new_product['id']}\n"
+                if new_product.get('has_image', False):
+                    response += f"📸 Image: Yes\n"
+                response += f"\n🔗 Website updated automatically! (Refresh the page)"
+                
+                send_telegram_message(chat_id, response)
+                logger.info(f"📋 Current products: {[p['name'] for p in products]}")
+            else:
+                logger.error("❌ Failed to save product to file")
+                send_telegram_message(chat_id, "❌ Failed to save product. Please try again.")
         
     except ValueError as e:
         logger.error(f"❌ Invalid price format: {e}")
