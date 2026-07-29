@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - WITH LONG DESCRIPTION
+# COMPLETE STORE SCRIPT - UPDATED COMMANDS
 # ============================================
 
 import threading
@@ -138,8 +138,6 @@ HTML_TEMPLATE = """
         .product-description-full.show { display: block; }
         .see-more-btn { background: none; border: none; color: #667eea; font-weight: 600; cursor: pointer; padding: 5px 0; font-size: 0.85em; text-decoration: underline; }
         .see-more-btn:hover { color: #764ba2; }
-        .product-instructions { background: #f8f9fa; padding: 8px 12px; border-radius: 8px; font-size: 0.78em; color: #666; margin: 6px 0 12px; border-left: 3px solid #667eea; line-height: 1.4; }
-        .product-instructions::before { content: '📋 '; }
         .buy-btn { background: #25D366; color: white; border: none; padding: 12px 16px; border-radius: 50px; font-size: 0.9em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); }
         .buy-btn:hover { transform: scale(1.02); box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35); background: #20b85f; }
         .buy-btn::before { content: '💬'; font-size: 1em; }
@@ -147,7 +145,8 @@ HTML_TEMPLATE = """
         .empty-message .icon { font-size: 3em; margin-bottom: 15px; display: block; }
         .empty-message h2 { color: #333; font-size: 1.3em; margin-bottom: 8px; }
         .empty-message p { color: #888; font-size: 0.95em; }
-        .footer { text-align: center; padding: 20px 15px; color: #888; font-size: 0.8em; margin-top: 15px; border-top: 1px solid #e0e0e0; }
+        .footer { text-align: center; padding: 20px 15px; color: #888; font-size: 0.9em; margin-top: 15px; border-top: 1px solid #e0e0e0; }
+        .footer strong { color: #667eea; }
         
         @media (max-width: 768px) {
             .header h1 { font-size: 1.3em; }
@@ -164,7 +163,6 @@ HTML_TEMPLATE = """
             .product-price-usd { font-size: 0.75em; }
             .product-about { font-size: 0.8em; }
             .product-description { font-size: 0.75em; }
-            .product-instructions { font-size: 0.7em; padding: 6px 10px; }
             .buy-btn { font-size: 0.8em; padding: 10px 12px; }
             .product-badge { font-size: 0.6em; padding: 3px 10px; top: 8px; right: 8px; }
             .product-image-placeholder { font-size: 2em; }
@@ -176,7 +174,6 @@ HTML_TEMPLATE = """
             .product-price-pkr { font-size: 1em; }
             .product-about { font-size: 0.7em; }
             .product-description { font-size: 0.7em; }
-            .product-instructions { font-size: 0.65em; padding: 4px 8px; }
             .buy-btn { font-size: 0.7em; padding: 8px 10px; }
             .controls input { width: 100px; font-size: 0.7em; }
         }
@@ -244,7 +241,6 @@ HTML_TEMPLATE = """
                             </button>
                             {% endif %}
                         </div>
-                        <div class="product-instructions">{{ product.instructions }}</div>
                         <a href="https://wa.me/{{ whatsapp_number }}?text={{ product.whatsapp_message | urlencode }}" target="_blank" class="buy-btn">Buy Now</a>
                     </div>
                 </div>
@@ -257,7 +253,9 @@ HTML_TEMPLATE = """
                 </div>
             {% endif %}
         </div>
-        <div class="footer"><p>🏪 Powered by Telegram Bot | Admin Dashboard Available</p></div>
+        <div class="footer">
+            <p>Powered By <strong>Tech Zone</strong></p>
+        </div>
     </div>
     <script>
         function filterProducts() {
@@ -411,7 +409,7 @@ def process_telegram_command(update):
         text = message.get('text', '')
         chat_id = message['chat']['id']
         
-        logger.info(f"📩 Processing message from {chat_id}: {text[:50]}")
+        logger.info(f"📩 Processing message from {chat_id}: {text[:50] if text else '(No text)'}")
         
         # Check for photo attachment
         photo = message.get('photo')
@@ -433,24 +431,31 @@ def process_telegram_command(update):
             send_telegram_message(chat_id, "⛔ Access denied. You are not authorized to use this bot.")
             return
         
-        # Check if user is in the middle of adding a product (waiting for description)
+        # Check if user is in the middle of adding/editing (waiting for description)
         if chat_id in pending_products:
-            # This is the description message
-            logger.info(f"📝 Received description for pending product")
-            process_product_description(chat_id, text, has_image, image_file_id)
+            if not text and has_image:
+                send_telegram_message(chat_id, "📸 Image received! Please send the description text as a separate message.")
+                return
+            
+            if pending_products[chat_id].get('action') == 'add':
+                logger.info(f"📝 Processing description for add")
+                process_product_description(chat_id, text, has_image, image_file_id)
+            elif pending_products[chat_id].get('action') == 'edit':
+                logger.info(f"📝 Processing description for edit")
+                process_edit_description(chat_id, text, has_image, image_file_id)
             return
         
-        # Parse command
+        # Parse commands
         if text.startswith('/start'):
             send_telegram_message(chat_id, 
                 "👋 Welcome Admin!\n\n"
                 "🛍️ ToolsMania Admin Dashboard\n\n"
                 "Available Commands:\n"
                 "📦 /products - List all products\n"
-                "➕ /add Name | PKR Price | USD Price | About | Instructions | WhatsApp Message\n"
+                "➕ /add Name | PKR Price | USD Price | About | WhatsApp Message\n"
                 "   *Attach image with this command*\n"
                 "   *Then send description as a separate message*\n"
-                "✏️ /edit ID | Name | PKR Price | USD Price | About | Instructions | WhatsApp Message\n"
+                "✏️ /edit ID | Name | PKR Price | USD Price | About | WhatsApp Message\n"
                 "   *Then send new description as separate message*\n"
                 "🗑️ /delete ID\n"
                 "📊 /stats - Store statistics\n"
@@ -516,17 +521,19 @@ def process_telegram_command(update):
             send_telegram_message(chat_id,
                 "📚 Admin Commands Guide\n\n"
                 "*Add Product with Image:*\n"
-                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`\n"
+                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | I want to order`\n"
                 "2. *Attach a photo* with the message\n"
                 "3. *Send the long description* as a separate message\n\n"
                 "*Edit Product:*\n"
-                "/edit 1 | New Name | 270000 | 999.99 | New about | New instructions | New message\n"
+                "/edit 1 | New Name | 270000 | 999.99 | New about | New WhatsApp message\n"
                 "*Then send new description as separate message*\n\n"
                 "*Delete Product:*\n"
                 "/delete 1\n\n"
                 "*View Image:*\n"
                 "/image 1\n\n"
-                "💰 *Prices:* PKR first, then USD"
+                "💰 *Prices:* PKR first, then USD\n"
+                "📝 *About:* Short description (1-2 lines)\n"
+                "📄 *Description:* Long details (sent separately)"
             )
         
         else:
@@ -534,7 +541,7 @@ def process_telegram_command(update):
                 send_telegram_message(chat_id, 
                     "📸 Image received!\n\n"
                     "To add a product with this image, send:\n"
-                    "`/add Name | PKR Price | USD Price | About | Instructions | WhatsApp Message`\n\n"
+                    "`/add Name | PKR Price | USD Price | About | WhatsApp Message`\n\n"
                     "Then send the long description as a separate message."
                 )
             else:
@@ -554,18 +561,18 @@ def process_add_product_start(chat_id, text, image_file_id, has_image):
         command_parts = text.replace('/add', '').strip()
         parts = [p.strip() for p in command_parts.split('|')]
         
-        if len(parts) < 6:
+        if len(parts) < 5:
             send_telegram_message(chat_id, 
-                "❌ Please provide all 6 fields separated by '|'\n\n"
-                "Format: `/add Name | PKR Price | USD Price | About | Instructions | WhatsApp Message`\n"
+                "❌ Please provide all 5 fields separated by '|'\n\n"
+                "Format: `/add Name | PKR Price | USD Price | About | WhatsApp Message`\n"
                 "📸 Attach a photo with the command\n\n"
                 "Example:\n"
-                "`/add iPhone 15 | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`\n\n"
+                "`/add iPhone 15 | 350000 | 1299.99 | Latest flagship phone | I want to order iPhone 15`\n\n"
                 "Then send the long description as a separate message."
             )
             return
         
-        name, pkr_price_str, usd_price_str, about, instructions, whatsapp_message = parts[:6]
+        name, pkr_price_str, usd_price_str, about, whatsapp_message = parts[:5]
         price_pkr = float(pkr_price_str.replace(',', ''))
         price_usd = float(usd_price_str.replace(',', ''))
         
@@ -575,7 +582,6 @@ def process_add_product_start(chat_id, text, image_file_id, has_image):
             'price_pkr': price_pkr,
             'price_usd': price_usd,
             'about': about,
-            'instructions': instructions,
             'whatsapp_message': whatsapp_message,
             'image_file_id': image_file_id,
             'has_image': has_image,
@@ -626,7 +632,6 @@ def process_product_description(chat_id, description, has_image, image_file_id):
             "price_usd": data['price_usd'],
             "about": data['about'],
             "description": description.strip(),
-            "instructions": data['instructions'],
             "whatsapp_message": data['whatsapp_message'],
             "has_image": False
         }
@@ -679,19 +684,19 @@ def process_edit_product_start(chat_id, text, image_file_id, has_image):
         command_parts = text.replace('/edit', '').strip()
         parts = [p.strip() for p in command_parts.split('|')]
         
-        if len(parts) < 7:
+        if len(parts) < 6:
             send_telegram_message(chat_id, 
-                "❌ Please provide ID and all 6 fields separated by '|'\n\n"
-                "Format: `/edit ID | Name | PKR Price | USD Price | About | Instructions | WhatsApp Message`\n"
+                "❌ Please provide ID and all 5 fields separated by '|'\n\n"
+                "Format: `/edit ID | Name | PKR Price | USD Price | About | WhatsApp Message`\n"
                 "📸 Attach new image to update photo\n\n"
                 "Then send the new description as a separate message.\n\n"
                 "Example:\n"
-                "`/edit 1 | iPhone 15 Pro | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`"
+                "`/edit 1 | iPhone 15 Pro | 350000 | 1299.99 | Latest phone | I want to order`"
             )
             return
         
         product_id = int(parts[0])
-        name, pkr_price_str, usd_price_str, about, instructions, whatsapp_message = parts[1:7]
+        name, pkr_price_str, usd_price_str, about, whatsapp_message = parts[1:6]
         price_pkr = float(pkr_price_str.replace(',', ''))
         price_usd = float(usd_price_str.replace(',', ''))
         
@@ -702,7 +707,6 @@ def process_edit_product_start(chat_id, text, image_file_id, has_image):
             'price_pkr': price_pkr,
             'price_usd': price_usd,
             'about': about,
-            'instructions': instructions,
             'whatsapp_message': whatsapp_message,
             'image_file_id': image_file_id,
             'has_image': has_image,
@@ -754,7 +758,6 @@ def process_edit_description(chat_id, description, has_image, image_file_id):
                 p['price_usd'] = data['price_usd']
                 p['about'] = data['about']
                 p['description'] = description.strip()
-                p['instructions'] = data['instructions']
                 p['whatsapp_message'] = data['whatsapp_message']
                 
                 # Update image if new one is attached
@@ -897,112 +900,6 @@ def process_get_image(chat_id, text):
         send_telegram_message(chat_id, "❌ Please provide a valid product ID (number).")
     except Exception as e:
         logger.error(f"❌ Error: {e}")
-        send_telegram_message(chat_id, f"❌ Error: {str(e)}")
-
-# ============================================
-# MODIFIED PROCESS MESSAGE TO HANDLE DESCRIPTIONS
-# ============================================
-
-def process_telegram_command(update):
-    """Process incoming Telegram commands - MODIFIED for description handling"""
-    global pending_products
-    
-    try:
-        message = update.get('message', {})
-        text = message.get('text', '')
-        chat_id = message['chat']['id']
-        
-        logger.info(f"📩 Processing message from {chat_id}: {text[:50] if text else '(No text)'}")
-        
-        # Check for photo attachment
-        photo = message.get('photo')
-        has_image = False
-        image_file_id = None
-        
-        if photo:
-            photo_sizes = sorted(photo, key=lambda x: x.get('file_size', 0))
-            image_file_id = photo_sizes[-1]['file_id'] if photo_sizes else None
-            has_image = True
-            caption = message.get('caption', '')
-            if caption:
-                text = caption
-                logger.info(f"📸 Message has image with caption: {text[:50]}")
-        
-        # Only allow admin
-        if str(chat_id) != ADMIN_CHAT_ID:
-            logger.warning(f"⛔ Unauthorized access attempt from {chat_id}")
-            send_telegram_message(chat_id, "⛔ Access denied. You are not authorized to use this bot.")
-            return
-        
-        # Check if user is in the middle of adding/editing (waiting for description)
-        if chat_id in pending_products:
-            if not text and has_image:
-                send_telegram_message(chat_id, "📸 Image received! Please send the description text as a separate message.")
-                return
-            
-            if pending_products[chat_id].get('action') == 'add':
-                logger.info(f"📝 Processing description for add")
-                process_product_description(chat_id, text, has_image, image_file_id)
-            elif pending_products[chat_id].get('action') == 'edit':
-                logger.info(f"📝 Processing description for edit")
-                process_edit_description(chat_id, text, has_image, image_file_id)
-            return
-        
-        # Parse commands
-        if text.startswith('/start'):
-            # ... (keep the same as before)
-            pass
-        
-        elif text.startswith('/add'):
-            process_add_product_start(chat_id, text, image_file_id, has_image)
-        
-        elif text.startswith('/edit'):
-            process_edit_product_start(chat_id, text, image_file_id, has_image)
-        
-        elif text.startswith('/delete'):
-            process_delete_product(chat_id, text)
-        
-        elif text.startswith('/image'):
-            process_get_image(chat_id, text)
-        
-        elif text.startswith('/products'):
-            # ... (keep the same)
-            pass
-        
-        elif text.startswith('/stats'):
-            # ... (keep the same)
-            pass
-        
-        elif text.startswith('/help'):
-            send_telegram_message(chat_id,
-                "📚 Admin Commands Guide\n\n"
-                "*Add Product with Image:*\n"
-                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest phone | Available in colors | I want to order`\n"
-                "2. *Attach a photo* with the message\n"
-                "3. *Send the long description* as a separate message\n\n"
-                "*Edit Product:*\n"
-                "/edit 1 | New Name | 270000 | 999.99 | New about | New instructions | New message\n"
-                "*Then send new description as separate message*\n\n"
-                "*Delete Product:*\n"
-                "/delete 1\n\n"
-                "*View Image:*\n"
-                "/image 1\n\n"
-                "💰 *Prices:* PKR first, then USD"
-            )
-        
-        else:
-            if has_image and not text:
-                send_telegram_message(chat_id, 
-                    "📸 Image received!\n\n"
-                    "To add a product with this image, send:\n"
-                    "`/add Name | PKR Price | USD Price | About | Instructions | WhatsApp Message`\n\n"
-                    "Then send the long description as a separate message."
-                )
-            else:
-                send_telegram_message(chat_id, "❌ Unknown command. Send /help for available commands.")
-            
-    except Exception as e:
-        logger.error(f"❌ Error processing command: {e}")
         send_telegram_message(chat_id, f"❌ Error: {str(e)}")
 
 # ============================================
