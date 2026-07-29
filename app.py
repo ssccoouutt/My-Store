@@ -1,5 +1,5 @@
 # ============================================
-# COMPLETE STORE SCRIPT - WITH UPDATED FORMAT
+# COMPLETE STORE SCRIPT - WITH FIXED NEWLINES
 # ============================================
 
 import threading
@@ -95,7 +95,15 @@ def save_products(products):
 
 app = Flask(__name__)
 
-# HTML Template with See More functionality
+# Helper filter to replace newlines with <br> tags
+@app.template_filter('nl2br')
+def nl2br(value):
+    """Convert newlines to <br> tags for HTML display"""
+    if value:
+        return value.replace('\n', '<br>')
+    return value
+
+# HTML Template with See More only on Instructions
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html>
@@ -134,15 +142,13 @@ HTML_TEMPLATE = """
         .product-price-pkr::before { content: 'Rs. '; font-weight: 600; }
         .product-price-usd { font-size: 0.85em; color: #888; font-weight: 500; }
         .product-price-usd::before { content: '$'; }
-        .product-description { color: #555; font-size: 0.82em; line-height: 1.5; margin: 6px 0 10px; flex: 1; min-height: 2.8em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; transition: all 0.3s ease; }
-        .product-description.expanded { -webkit-line-clamp: unset; display: block; }
-        .product-description .see-more-btn { color: #667eea; font-weight: 600; cursor: pointer; }
-        .product-description .see-more-btn:hover { text-decoration: underline; }
+        .product-description { color: #555; font-size: 0.82em; line-height: 1.5; margin: 6px 0 10px; flex: 1; min-height: 2.8em; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
         
-        .product-instructions { background: #f8f9fa; padding: 8px 12px; border-radius: 8px; font-size: 0.78em; color: #666; margin: 6px 0 12px; border-left: 3px solid #667eea; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; transition: all 0.3s ease; }
+        .product-instructions { background: #f8f9fa; padding: 10px 12px; border-radius: 8px; font-size: 0.82em; color: #555; margin: 6px 0 12px; border-left: 3px solid #667eea; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; transition: all 0.3s ease; }
         .product-instructions.expanded { -webkit-line-clamp: unset; display: block; }
-        .product-instructions .see-more-btn { color: #667eea; font-weight: 600; cursor: pointer; }
+        .product-instructions .see-more-btn { color: #667eea; font-weight: 600; cursor: pointer; display: inline-block; margin-top: 4px; }
         .product-instructions .see-more-btn:hover { text-decoration: underline; }
+        .product-instructions .details-label { font-weight: 700; color: #333; }
         
         .buy-btn { background: #25D366; color: white; border: none; padding: 12px 16px; border-radius: 50px; font-size: 0.9em; font-weight: 700; cursor: pointer; transition: all 0.3s ease; text-decoration: none; display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: auto; box-shadow: 0 4px 15px rgba(37, 211, 102, 0.25); }
         .buy-btn:hover { transform: scale(1.02); box-shadow: 0 6px 25px rgba(37, 211, 102, 0.35); background: #20b85f; }
@@ -169,7 +175,7 @@ HTML_TEMPLATE = """
             .product-price-pkr { font-size: 1.2em; }
             .product-price-usd { font-size: 0.75em; }
             .product-description { font-size: 0.75em; min-height: 2.4em; }
-            .product-instructions { font-size: 0.7em; padding: 6px 10px; }
+            .product-instructions { font-size: 0.75em; padding: 8px 10px; }
             .buy-btn { font-size: 0.8em; padding: 10px 12px; }
             .product-badge { font-size: 0.6em; padding: 3px 10px; top: 8px; right: 8px; }
             .product-image-placeholder { font-size: 2em; }
@@ -180,7 +186,7 @@ HTML_TEMPLATE = """
             .product-name { font-size: 0.8em; }
             .product-price-pkr { font-size: 1em; }
             .product-description { font-size: 0.7em; }
-            .product-instructions { font-size: 0.65em; padding: 4px 8px; }
+            .product-instructions { font-size: 0.7em; padding: 6px 8px; }
             .buy-btn { font-size: 0.7em; padding: 8px 10px; }
             .controls input { width: 100px; font-size: 0.7em; }
         }
@@ -235,15 +241,13 @@ HTML_TEMPLATE = """
                             <span class="product-price-usd">{{ "%.2f"|format(product.price_usd) }}</span>
                         </div>
                         
-                        <!-- About Product with See More -->
-                        <div class="product-description" onclick="toggleExpand(this)">
-                            {{ product.description }}
-                            <span class="see-more-btn" onclick="event.stopPropagation(); toggleExpand(this.parentElement)">See More</span>
-                        </div>
+                        <!-- About Product - No See More -->
+                        <div class="product-description">{{ product.description }}</div>
                         
-                        <!-- Instructions with See More -->
+                        <!-- Instructions with Details label and See More -->
                         <div class="product-instructions" onclick="toggleExpand(this)">
-                            📋 {{ product.instructions }}
+                            <span class="details-label">📋 Details:</span><br>
+                            {{ product.instructions|nl2br|safe }}
                             <span class="see-more-btn" onclick="event.stopPropagation(); toggleExpand(this.parentElement)">See More</span>
                         </div>
                         
@@ -285,7 +289,7 @@ HTML_TEMPLATE = """
             }
         }
         
-        // Toggle expand for See More functionality
+        // Toggle expand for Instructions only
         function toggleExpand(element) {
             element.classList.toggle('expanded');
             
@@ -313,7 +317,7 @@ HTML_TEMPLATE = """
         
         // Auto reset all expanded elements on scroll
         document.addEventListener('scroll', function() {
-            const expandedElements = document.querySelectorAll('.product-description.expanded, .product-instructions.expanded');
+            const expandedElements = document.querySelectorAll('.product-instructions.expanded');
             expandedElements.forEach(el => {
                 el.classList.remove('expanded');
                 const btn = el.querySelector('.see-more-btn');
@@ -325,8 +329,8 @@ HTML_TEMPLATE = """
         
         // Auto reset all expanded elements on click anywhere else
         document.addEventListener('click', function(event) {
-            if (!event.target.closest('.product-description') && !event.target.closest('.product-instructions')) {
-                const expandedElements = document.querySelectorAll('.product-description.expanded, .product-instructions.expanded');
+            if (!event.target.closest('.product-instructions')) {
+                const expandedElements = document.querySelectorAll('.product-instructions.expanded');
                 expandedElements.forEach(el => {
                     el.classList.remove('expanded');
                     const btn = el.querySelector('.see-more-btn');
@@ -489,7 +493,7 @@ def process_telegram_command(update):
                 "📸 *To add image:* Attach a photo with the /add or /edit command\n"
                 "💰 *Price Format:* PKR first, then USD\n"
                 "📝 *About Product:* Description of the product\n"
-                "📋 *Instructions:* Delivery, returns, or other info (supports multi-line text)"
+                "📋 *Instructions:* Delivery, returns, or other info (supports multi-line text with newlines)"
             )
             logger.info(f"✅ Sent /start response to {chat_id}")
         
@@ -547,7 +551,7 @@ def process_telegram_command(update):
             send_telegram_message(chat_id,
                 "📚 Admin Commands Guide\n\n"
                 "*Add Product with Image:*\n"
-                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest flagship phone with A17 chip | Available in colors, free delivery | I want to order iPhone 15`\n"
+                "1. Send: `/add iPhone 15 | 350000 | 1299.99 | Latest flagship phone with A17 chip | Available in colors\\nFree delivery\\n1 year warranty | I want to order iPhone 15`\n"
                 "2. *Attach a photo* with the message\n\n"
                 "*Edit Product:*\n"
                 "/edit 1 | New Name | 270000 | 999.99 | New description | New instructions | New message\n"
@@ -558,7 +562,7 @@ def process_telegram_command(update):
                 "/image 1\n\n"
                 "💰 *Prices:* PKR first, then USD\n"
                 "📝 *About Product:* Brief description\n"
-                "📋 *Instructions:* Multi-line text supported"
+                "📋 *Instructions:* Multi-line text supported (use \\n for new lines)"
             )
         
         else:
@@ -603,11 +607,14 @@ def save_product_image(image_file_id, product_id):
         return None, None
 
 def process_add_product(chat_id, text, image_file_id, has_image):
-    """Process add product command with updated format"""
+    """Process add product command - preserves newlines"""
     try:
         logger.info(f"➕ Adding product from: {text[:100]}")
         
+        # Remove /add and split by |
         command_parts = text.replace('/add', '').strip()
+        
+        # Split by | but preserve content inside
         parts = [p.strip() for p in command_parts.split('|')]
         
         if len(parts) < 6:
@@ -615,9 +622,9 @@ def process_add_product(chat_id, text, image_file_id, has_image):
                 "❌ Please provide all 6 fields separated by '|'\n\n"
                 "Format: `/add Name | PKR Price | USD Price | About Product | Instructions | WhatsApp Message`\n"
                 "📸 Attach a photo with the command\n\n"
+                "💡 *Instructions can be multi-line* - use Shift+Enter for new lines\n\n"
                 "Example:\n"
-                "`/add iPhone 15 | 350000 | 1299.99 | Latest flagship phone with A17 chip | Available in colors, free delivery | I want to order iPhone 15`\n\n"
-                "💡 *Instructions can be multi-line text* - just keep typing!"
+                "`/add iPhone 15 | 350000 | 1299.99 | Latest flagship phone | Available in colors\\nFree delivery\\n1 year warranty | I want to order iPhone 15`"
             )
             return
         
@@ -625,8 +632,11 @@ def process_add_product(chat_id, text, image_file_id, has_image):
         pkr_price_str = parts[1].strip()
         usd_price_str = parts[2].strip()
         description = parts[3].strip()
-        instructions = parts[4].strip()
+        instructions = parts[4].strip()  # Preserves newlines from Telegram
         whatsapp_message = parts[5].strip()
+        
+        # Log to verify newlines are preserved
+        logger.info(f"📝 Instructions with newlines: {repr(instructions)}")
         
         price_pkr = float(pkr_price_str.replace(',', ''))
         price_usd = float(usd_price_str.replace(',', ''))
@@ -644,7 +654,7 @@ def process_add_product(chat_id, text, image_file_id, has_image):
             "price_pkr": price_pkr,
             "price_usd": price_usd,
             "description": description,
-            "instructions": instructions,
+            "instructions": instructions,  # Preserves newlines
             "whatsapp_message": whatsapp_message,
             "has_image": False
         }
@@ -689,7 +699,7 @@ def process_add_product(chat_id, text, image_file_id, has_image):
         send_telegram_message(chat_id, f"❌ Error adding product: {str(e)}")
 
 def process_edit_product(chat_id, text, image_file_id, has_image):
-    """Process edit product command with updated format"""
+    """Process edit product command - preserves newlines"""
     try:
         logger.info(f"✏️ Editing product from: {text[:100]}")
         
@@ -702,7 +712,7 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
                 "Format: `/edit ID | Name | PKR Price | USD Price | About Product | Instructions | WhatsApp Message`\n"
                 "📸 Attach new image to update photo\n\n"
                 "Example:\n"
-                "`/edit 1 | iPhone 15 Pro | 350000 | 1299.99 | Latest flagship | Available in colors | I want to order`"
+                "`/edit 1 | iPhone 15 Pro | 350000 | 1299.99 | Latest flagship | Available in colors\\nFree delivery | I want to order`"
             )
             return
         
@@ -711,8 +721,10 @@ def process_edit_product(chat_id, text, image_file_id, has_image):
         pkr_price_str = parts[2].strip()
         usd_price_str = parts[3].strip()
         description = parts[4].strip()
-        instructions = parts[5].strip()
+        instructions = parts[5].strip()  # Preserves newlines
         whatsapp_message = parts[6].strip()
+        
+        logger.info(f"📝 Instructions with newlines: {repr(instructions)}")
         
         price_pkr = float(pkr_price_str.replace(',', ''))
         price_usd = float(usd_price_str.replace(',', ''))
